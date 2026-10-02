@@ -1,0 +1,3 @@
+export function localDateKey(date=new Date()){const y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,'0'),d=String(date.getDate()).padStart(2,'0');return y+'-'+m+'-'+d;}
+export function yesterdayKey(){const d=new Date();d.setDate(d.getDate()-1);return localDateKey(d);}
+export function formatDate(key){return new Date(key+'T00:00:00').toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});}
