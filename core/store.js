@@ -1,0 +1,2 @@
+import {clone,defaultData,normalizeData,normalizeCompleted} from '../data/defaults.js';
+export function createStore(){let state={data:clone(defaultData),completed:{},storageMode:'localStorage'};const listeners=new Set();const get=()=>state;const set=(patch)=>{state={...state,...patch};listeners.forEach(fn=>fn(state));};const subscribe=fn=>(listeners.add(fn),()=>listeners.delete(fn));const replace=(data,completed)=>set({data:normalizeData(data),completed:normalizeCompleted(completed)});return {get,set,subscribe,replace};}
