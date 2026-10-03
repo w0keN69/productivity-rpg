@@ -53,7 +53,7 @@ export function weeklyQuestProgress(data){
 export function achievementUnlocked(data,id){
   const level=levelFromXp(data.xp);
   return {
-    'first-quest':data.xp>=5,'level-2':level>=2,'100-xp':data.xp>=100,'500-xp':data.xp>=500,
+    'first-quest':data.history.length>=1 || data.achievementRewards.includes('first-quest') || data.xp>=5,'level-2':level>=2,'100-xp':data.xp>=100,'500-xp':data.xp>=500,
     'first-full-day':data.history.length>=1,'3-day-streak':data.streak>=3,'10-day-streak':data.streak>=10,'1000-xp':data.xp>=1000
   }[id]||false;
 }
