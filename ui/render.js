@@ -149,9 +149,20 @@ function bind(){
   $('#focusReset')?.addEventListener('click',()=>{focusRunning=false;focusPlan=null;focusRound=1;focusRemaining=0;clearInterval(focusTimer);render();});
   $('#focusSkip')?.addEventListener('click',()=>{clearInterval(focusTimer);focusRunning=false;focusMode='Focus';focusRound++;focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();});
   $('#export')?.addEventListener('click',()=>{exportBackup(store.get().data,store.get().completed);toast('Backup exported');});
-  $('#import')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);if(!p.data?.routines)throw Error();if(confirm('Import this backup?')){store.replace(p.data,p.completed);save();render();toast('Backup imported');}}catch{toast('Could not import backup');}};r.readAsText(f);});
+  $('#import')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);if(p?.app!=='In Track'||!p.data?.routines||typeof p.data.routines!=='object')throw Error('Invalid backup');if(confirm('Import this In Track backup? Your current local progress will be replaced.')){store.replace(p.data,p.completed);save();render();toast('Backup imported');}}catch{toast('Could not import this backup.');}};r.readAsText(f);});
   $('#reset')?.addEventListener('click',()=>{if(confirm('Reset all In Track data?')){store.replace(clone(defaultData),{});save();render();toast('All data reset');}});
 }
 
-async function init(){await persistStorage();const saved=await loadState();if(saved?.data){refreshDailyState(saved.data);store.replace(saved.data,saved.completed);}render();}
+async function init(){
+  await persistStorage();
+  const saved=await loadState();
+  if(saved?.data){
+    refreshDailyState(saved.data);
+    const completed=saved.completed&&typeof saved.completed==='object'?saved.completed:{};
+    store.replace(saved.data,completed);
+  }
+  render();
+}
+window.addEventListener('error',e=>{console.error(e);toast('In Track encountered an error. Your saved data is unchanged.');});
+window.addEventListener('unhandledrejection',e=>{console.error(e.reason);});
 init();
