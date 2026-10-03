@@ -10,7 +10,7 @@ export const defaultData={
     Evening:[{id:'e1',name:'Prepare for tomorrow',priority:'medium',difficulty:'medium'},{id:'e2',name:'Quick room reset',priority:'low',difficulty:'easy'}]
   },
   rewards:[{id:'r1',name:'1 hour gaming',cost:100,timeLimit:60},{id:'r2',name:'Movie night',cost:300,timeLimit:120}],
-  history:[],rewardHistory:[],notes:[],focusSessions:[],achievementRewards:[]
+  history:[],rewardHistory:[],notes:[],focusSessions:[],achievementRewards:[],focusPresets:[{id:'study',name:'Study',work:30,break:10,rounds:3}]
 };
 
 export const clone=x=>JSON.parse(JSON.stringify(x));
@@ -26,6 +26,7 @@ export function normalizeData(raw){
   d.rewardHistory=Array.isArray(raw.rewardHistory)?raw.rewardHistory:[];
   d.notes=Array.isArray(raw.notes)?raw.notes:[];
   d.focusSessions=Array.isArray(raw.focusSessions)?raw.focusSessions:[];
+  d.focusPresets=Array.isArray(raw.focusPresets)&&raw.focusPresets.length?raw.focusPresets:d.focusPresets;
   d.achievementRewards=Array.isArray(raw.achievementRewards)?raw.achievementRewards:[];
   d.selectedRoutine=d.routines[d.selectedRoutine]?d.selectedRoutine:Object.keys(d.routines)[0]||'Morning';
   return d;
