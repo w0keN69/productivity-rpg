@@ -1,35 +1,16 @@
 export const STORAGE_KEY='productivityRPG_v2';
-export const STORAGE_VERSION=4;
+export const STORAGE_VERSION=5;
 
 export const defaultData={
-  version:STORAGE_VERSION,
-  xp:0,
-  coins:0,
-  streak:0,
-  lastComplete:null,
-  lastDailyBonusDate:null,
+  version:STORAGE_VERSION,xp:0,coins:0,streak:0,lastComplete:null,lastDailyBonusDate:null,
   selectedRoutine:'Morning',
   routines:{
-    Morning:[
-      {id:'m1',name:'Wake up',priority:'high',difficulty:'easy'},
-      {id:'m2',name:'Make bed',priority:'medium',difficulty:'easy'},
-      {id:'m3',name:'Drink water',priority:'medium',difficulty:'easy'}
-    ],
-    'Work / Study':[
-      {id:'w1',name:'Complete main priority',priority:'high',difficulty:'hard'},
-      {id:'w2',name:'Study / certification',priority:'medium',difficulty:'medium'}
-    ],
-    Evening:[
-      {id:'e1',name:'Prepare for tomorrow',priority:'medium',difficulty:'medium'},
-      {id:'e2',name:'Quick room reset',priority:'low',difficulty:'easy'}
-    ]
+    Morning:[{id:'m1',name:'Wake up',priority:'high',difficulty:'easy'},{id:'m2',name:'Make bed',priority:'medium',difficulty:'easy'},{id:'m3',name:'Drink water',priority:'medium',difficulty:'easy'}],
+    'Work / Study':[{id:'w1',name:'Complete main priority',priority:'high',difficulty:'hard'},{id:'w2',name:'Study / certification',priority:'medium',difficulty:'medium'}],
+    Evening:[{id:'e1',name:'Prepare for tomorrow',priority:'medium',difficulty:'medium'},{id:'e2',name:'Quick room reset',priority:'low',difficulty:'easy'}]
   },
-  rewards:[
-    {id:'r1',name:'1 hour gaming',cost:100,timeLimit:60},
-    {id:'r2',name:'Movie night',cost:300,timeLimit:120}
-  ],
-  history:[],
-  rewardHistory:[]
+  rewards:[{id:'r1',name:'1 hour gaming',cost:100,timeLimit:60},{id:'r2',name:'Movie night',cost:300,timeLimit:120}],
+  history:[],rewardHistory:[],notes:[],focusSessions:[],achievementRewards:[]
 };
 
 export const clone=x=>JSON.parse(JSON.stringify(x));
@@ -37,19 +18,16 @@ export const clone=x=>JSON.parse(JSON.stringify(x));
 export function normalizeData(raw){
   const d=clone(defaultData);
   if(!raw||typeof raw!=='object')return d;
-  Object.assign(d,raw);
-  d.version=STORAGE_VERSION;
-  d.xp=Math.max(0,Number(d.xp)||0);
-  d.coins=Math.max(0,Number(d.coins)||0);
-  d.streak=Math.max(0,Number(d.streak)||0);
+  Object.assign(d,raw); d.version=STORAGE_VERSION;
+  d.xp=Math.max(0,Number(d.xp)||0); d.coins=Math.max(0,Number(d.coins)||0); d.streak=Math.max(0,Number(d.streak)||0);
   d.routines=raw.routines&&typeof raw.routines==='object'&&Object.keys(raw.routines).length?raw.routines:d.routines;
   d.rewards=Array.isArray(raw.rewards)?raw.rewards:d.rewards;
   d.history=Array.isArray(raw.history)?raw.history:[];
   d.rewardHistory=Array.isArray(raw.rewardHistory)?raw.rewardHistory:[];
+  d.notes=Array.isArray(raw.notes)?raw.notes:[];
+  d.focusSessions=Array.isArray(raw.focusSessions)?raw.focusSessions:[];
+  d.achievementRewards=Array.isArray(raw.achievementRewards)?raw.achievementRewards:[];
   d.selectedRoutine=d.routines[d.selectedRoutine]?d.selectedRoutine:Object.keys(d.routines)[0]||'Morning';
   return d;
 }
-
-export function normalizeCompleted(raw){
-  return raw&&typeof raw==='object'?raw:{};
-}
+export function normalizeCompleted(raw){return raw&&typeof raw==='object'?raw:{};}
