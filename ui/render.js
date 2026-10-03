@@ -58,8 +58,30 @@ function taskRow(t){return `<div class="task"><button class="check ${done(t)?'do
 
 function rewards(s){const d=s.data;return `<section class="card"><div class="card-head"><div><h2>Rewards Shop</h2><span class="sub">Spend coins on rewards you choose.</span></div><b>${d.coins} coins</b></div><div class="form"><input class="input" id="rewardName" placeholder="Reward name"><input class="input" id="rewardCost" type="number" min="1" placeholder="Coin cost"><input class="input" id="rewardTime" type="number" min="1" placeholder="Time limit (min)"><button class="btn primary" id="addReward">Add reward</button></div><div class="list">${d.rewards.map(r=>`<div class="row"><div><b>${esc(r.name)}</b><div class="sub">${r.cost} coins${r.timeLimit?' · '+r.timeLimit+' min':''}</div></div><div><button class="btn" data-redeem="${esc(r.id)}">Redeem</button> <button class="icon-btn" data-reward-delete="${esc(r.id)}">Delete</button></div></div>`).join('')||'<div class="empty">No rewards yet.</div>'}</div>${d.rewardHistory.length?'<h3 class="section-title">Recent redemptions</h3><div class="list">'+d.rewardHistory.slice(-5).reverse().map(x=>`<div class="row"><span>${esc(x.name)}<small>${formatDate(x.date)}${x.timeLimit?' · '+x.timeLimit+' min':''}</small></span><b>-${x.cost}</b></div>`).join('')+'</div>':''}</section>`;}
 
-function history(d){return `<section class="card"><div class="card-head"><div><h2>History</h2><span class="sub">Completed full days are recorded here.</span></div></div><div class="list">${d.history.slice().reverse().map(h=>`<div class="row"><span><b>${formatDate(h.date)}</b><small>${h.done}/${h.total} tasks complete</small></span><span>${h.xp} XP · ${h.coins} coins · ${h.streak} day streak</span></div>`).join('')||'<div class="empty">Complete all daily quests to start building history.</div>'}</div></section>`;}
-
+function history(d){
+  const entries=d.history.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const totalTasks=entries.reduce((n,h)=>n+(Number(h.done)||0),0);
+  const totalXp=entries.reduce((n,h)=>n+(Number(h.xpEarned)||0),0);
+  const totalCoins=entries.reduce((n,h)=>n+(Number(h.coinsEarned)||0),0);
+  const longest=entries.reduce((n,h)=>Math.max(n,Number(h.streak)||0),0);
+  const focusCount=d.focusSessions.length,totalFocus=d.focusSessions.reduce((n,x)=>n+(Number(x.minutes)||0),0);
+  const currentWeek=weekKey(),weekEntries=entries.filter(h=>weekKey(new Date(h.date+'T00:00:00'))===currentWeek);
+  const weekXp=weekEntries.reduce((n,h)=>n+(Number(h.xpEarned)||0),0),weekTasks=weekEntries.reduce((n,h)=>n+(Number(h.done)||0),0);
+  return `<section class="card history-card">
+    <div class="card-head"><div><h2>Progress</h2><span class="sub">A clear view of how In Track is helping you build consistency.</span></div></div>
+    <div class="history-stats">
+      <div class="history-stat"><span>Days completed</span><b>${entries.length}</b></div>
+      <div class="history-stat"><span>Tasks completed</span><b>${totalTasks}</b></div>
+      <div class="history-stat"><span>XP earned</span><b>${totalXp}</b></div>
+      <div class="history-stat"><span>Longest streak</span><b>${longest} days</b></div>
+      <div class="history-stat"><span>Focus sessions</span><b>${focusCount}</b></div>
+      <div class="history-stat"><span>Focus time</span><b>${totalFocus} min</b></div>
+    </div>
+    <div class="history-week"><div><span>This week</span><b>${weekTasks} tasks · ${weekXp} XP</b></div><div class="mini-progress"><i style="width:${Math.min(100,weekXp)}%"></i></div><small>Weekly quest progress</small></div>
+    <h3 class="section-title">Recent days</h3>
+    <div class="list">${entries.slice(0,14).map(h=>`<div class="row"><span><b>${formatDate(h.date)}</b><small>${h.done}/${h.total} tasks · ${h.streak} day streak</small></span><span>${Number(h.xpEarned)||0} XP · ${Number(h.coinsEarned)||0} coins</span></div>`).join('')||'<div class="empty">Complete all daily tasks to start building history.</div>'}</div>
+  </section>`;
+}
 function achievements(s){const d=s.data;return `<section class="card"><div class="card-head"><div><h2>Achievements</h2><span class="sub">Earn one-time XP and coin rewards.</span></div></div><div class="list">${ACHIEVEMENTS.map(a=>{const u=d.achievementRewards.includes(a.id);const unlocked=!!({ 'first-quest':d.xp>=5,'level-2':levelFromXp(d.xp)>=2,'100-xp':d.xp>=100,'500-xp':d.xp>=500,'first-full-day':d.history.length>=1,'3-day-streak':d.streak>=3,'10-day-streak':d.streak>=10,'1000-xp':d.xp>=1000}[a.id]);return `<div class="achievement ${unlocked?'unlocked':''}"><div><b>${a.name}</b><small>${a.description} · +${a.xp} XP · +${a.coins} coins</small></div><strong>${u?'Claimed':unlocked?'Awarded':'Locked'}</strong></div>`}).join('')}</div></section>`;}
 
 function notes(s){const d=s.data;return `<section class="card"><div class="card-head"><div><h2>Sticky Notes</h2><span class="sub">Keep quick thoughts and reminders close.</span></div></div><div class="form note-form"><input class="input" id="noteTitle" placeholder="Note title"><textarea class="input" id="noteBody" placeholder="Write a note..."></textarea><button class="btn primary" id="addNote">Add note</button></div><div class="notes-grid">${d.notes.map(n=>`<article class="note ${n.pinned?'pinned':''}"><div class="note-head"><b>${esc(n.title||'Untitled')}</b><button class="icon-btn" data-note-pin="${esc(n.id)}">${n.pinned?'Unpin':'Pin'}</button></div><p>${esc(n.body)}</p><small>${formatDate(n.date)}</small><div class="note-actions"><button class="icon-btn" data-note-edit="${esc(n.id)}">Edit</button><button class="icon-btn" data-note-delete="${esc(n.id)}">Delete</button></div></article>`).join('')||'<div class="empty">No notes yet.</div>'}</div></section>`;}
