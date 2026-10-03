@@ -23,6 +23,7 @@ export function normalizeData(raw){
   d.routines=raw.routines&&typeof raw.routines==='object'&&Object.keys(raw.routines).length?raw.routines:d.routines;
   d.rewards=Array.isArray(raw.rewards)?raw.rewards:d.rewards;
   d.history=Array.isArray(raw.history)?raw.history:[];
+  d.history=d.history.map(h=>({...h,xpEarned:Number(h.xpEarned)||0,coinsEarned:Number(h.coinsEarned)||0}));
   d.rewardHistory=Array.isArray(raw.rewardHistory)?raw.rewardHistory:[];
   d.notes=Array.isArray(raw.notes)?raw.notes:[];
   d.focusSessions=Array.isArray(raw.focusSessions)?raw.focusSessions:[];
