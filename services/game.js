@@ -59,9 +59,16 @@ export function achievementUnlocked(data,id){
 }
 export function grantNewAchievementRewards(data){
   const newly=[];
+  // Evaluate all achievement conditions against the same pre-reward snapshot.
+  // This prevents an achievement reward from immediately unlocking another achievement
+  // in the same action and makes progression predictable.
+  const snapshot={...data,history:Array.isArray(data.history)?data.history.slice():[]};
   for(const a of ACHIEVEMENTS){
-    if(achievementUnlocked(data,a.id)&&!data.achievementRewards.includes(a.id)){
-      data.achievementRewards.push(a.id); data.xp+=a.xp; data.coins+=a.coins; newly.push(a);
+    if(achievementUnlocked(snapshot,a.id)&&!data.achievementRewards.includes(a.id)){
+      data.achievementRewards.push(a.id);
+      data.xp+=a.xp;
+      data.coins+=a.coins;
+      newly.push(a);
     }
   }
   return newly;
