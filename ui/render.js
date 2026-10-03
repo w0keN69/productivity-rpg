@@ -6,7 +6,7 @@ import {localDateKey,formatDate} from '../utils/date.js';
 
 const store=createStore();
 let view='Today',timer,menuOpen=false,settingsOpen=false;
-let focusTimer=null,focusRemaining=0,focusTotal=0,focusRunning=false,focusMode='Focus';
+let focusTimer=null,focusRemaining=0,focusTotal=0,focusRunning=false,focusMode='Focus',focusPlan=null,focusRound=1;
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
@@ -19,7 +19,7 @@ function toggleMenu(force){menuOpen=typeof force==='boolean'?force:!menuOpen;con
 function render(){
   const s=store.get(),d=s.data;
   document.querySelector('#app').innerHTML=`<div class="app">
-    <header class="top"><div><h1>In Track</h1></div><div class="top-actions"><span class="save" id="saveStatus">Saved</span><button class="menu-btn" id="menuBtn">Menu</button></div></header>
+    <header class="top"><div><h1>In Track</h1></div><div class="top-actions"><span class="save" id="saveStatus">Saved</span><span class="coin-pill">${d.coins} coins</span><button class="menu-btn" id="menuBtn">Menu</button></div></header>
     <div class="menu-backdrop ${menuOpen?'open':''}" id="menuBackdrop"></div>
     <nav class="menu-panel ${menuOpen?'open':''}" id="menuPanel">${['Today','Rewards','History','Achievements','Notes','Focus','Data & Backup'].map(x=>`<button class="menu-item ${view===x?'active':''}" data-view="${x}">${x}</button>`).join('')}</nav>
     ${view==='Today'?today(s):view==='Rewards'?rewards(s):view==='History'?history(d):view==='Achievements'?achievements(s):view==='Notes'?notes(s):view==='Focus'?focus(s):backup(d)}
@@ -30,12 +30,11 @@ function render(){
 function today(s){
   const d=s.data,l=levelFromXp(d.xp),current=xpForLevel(d.xp),next=xpToNextLevel(d.xp),routines=Object.entries(d.routines),todayQ=dailyQuestProgress(d,s.completed),weekQ=weeklyQuestProgress(d);
   return `<section class="stats-card">
-    <div class="stats-grid">
-      <div class="stat"><span>Level</span><b>${l}</b><small>${current} / ${current+next} XP</small></div>
-    <div class="stat"><span>XP</span><b>${d.xp}</b><div class="progress"><i style="width:${Math.min(100,current/(current+next||1)*100)}%"></i></div></div>
-    <div class="stat"><span>Coins</span><b>${d.coins}</b><small>Quest rewards</small></div>
-    <div class="stat"><span>Streak</span><b>${d.streak} days</b><small>${todayQ.done}/${todayQ.total} today</small></div>
+    <div class="player-stats">
+      <div class="stat stat-main"><span>Level</span><b>${l}</b><small>${current} / ${current+next} XP</small></div>
+      <div class="stat stat-main"><span>Streak</span><b>${d.streak} days</b><small>${todayQ.done}/${todayQ.total} today</small></div>
     </div>
+    <div class="xp-stat"><div class="xp-head"><span>XP</span><b>${d.xp}</b></div><div class="progress"><i style="width:${Math.min(100,current/(current+next||1)*100)}%"></i></div></div>
   </section>
   <section class="card">
     <div class="card-head"><div><h2>Today's Routines</h2></div><button class="btn" id="settingsBtn">Settings</button></div>
@@ -65,14 +64,25 @@ function achievements(s){const d=s.data;return `<section class="card"><div class
 
 function notes(s){const d=s.data;return `<section class="card"><div class="card-head"><div><h2>Sticky Notes</h2><span class="sub">Keep quick thoughts and reminders close.</span></div></div><div class="form note-form"><input class="input" id="noteTitle" placeholder="Note title"><textarea class="input" id="noteBody" placeholder="Write a note..."></textarea><button class="btn primary" id="addNote">Add note</button></div><div class="notes-grid">${d.notes.map(n=>`<article class="note ${n.pinned?'pinned':''}"><div class="note-head"><b>${esc(n.title||'Untitled')}</b><button class="icon-btn" data-note-pin="${esc(n.id)}">${n.pinned?'Unpin':'Pin'}</button></div><p>${esc(n.body)}</p><small>${formatDate(n.date)}</small><div class="note-actions"><button class="icon-btn" data-note-edit="${esc(n.id)}">Edit</button><button class="icon-btn" data-note-delete="${esc(n.id)}">Delete</button></div></article>`).join('')||'<div class="empty">No notes yet.</div>'}</div></section>`;}
 
-function focus(s){const d=s.data;const mins=Math.floor(focusRemaining/60),secs=String(focusRemaining%60).padStart(2,'0');return `<section class="card focus-card"><div class="card-head"><div><h2>Focus</h2><span class="sub">Complete focused sessions to earn XP and coins.</span></div></div><div class="focus-mode"><button class="btn ${focusMode==='Focus'?'primary':''}" data-focus-mode="Focus">Focus</button><button class="btn ${focusMode==='Short Break'?'primary':''}" data-focus-mode="Short Break">Short Break</button></div><div class="timer-display" id="focusDisplay">${focusRemaining?mins+':'+secs:'25:00'}</div><div class="focus-presets"><button class="btn" data-focus-min="5">5 min</button><button class="btn" data-focus-min="15">15 min</button><button class="btn" data-focus-min="25">25 min</button><button class="btn" data-focus-min="50">50 min</button></div><div class="focus-actions"><button class="btn primary" id="focusStart">${focusRunning?'Pause':'Start'}</button><button class="btn" id="focusReset">Reset</button></div><small>Completed Focus sessions reward 15 XP and 5 coins.</small><h3 class="section-title">Recent sessions</h3><div class="list">${d.focusSessions.slice(-5).reverse().map(x=>`<div class="row"><span><b>${x.minutes} minute focus</b><small>${formatDate(x.date)}</small></span><span>+${x.xp} XP · +${x.coins} coins</span></div>`).join('')||'<div class="empty">No completed sessions yet.</div>'}</div></section>`; }
-
+function focus(s){
+  const d=s.data,mins=Math.floor(focusRemaining/60),secs=String(focusRemaining%60).padStart(2,'0');
+  const display=focusRemaining?mins+':'+secs:(focusPlan?focusPlan.work+':00':focusMode==='Focus'?'25:00':'05:00');
+  const phaseLabel=focusPlan?(focusMode==='Focus'?'Focus · Round '+focusRound+' of '+focusPlan.rounds:'Break · Next focus in '+Math.max(0,focusPlan.rounds-focusRound+1)):focusMode;
+  return `<section class="card focus-card"><div class="card-head"><div><h2>Focus</h2><span class="sub">Build focused work sessions and planned breaks.</span></div></div>
+  <div class="focus-mode"><button class="btn ${focusMode==='Focus'?'primary':''}" data-focus-mode="Focus">Focus</button><button class="btn ${focusMode==='Short Break'?'primary':''}" data-focus-mode="Short Break">Short Break</button></div>
+  <div class="focus-phase">${phaseLabel}</div><div class="timer-display" id="focusDisplay">${display}</div>
+  <div class="focus-presets"><span class="preset-label">Quick</span><button class="btn" data-focus-min="5">5 min</button><button class="btn" data-focus-min="15">15 min</button><button class="btn" data-focus-min="25">25 min</button><button class="btn" data-focus-min="50">50 min</button></div>
+  <div class="focus-actions"><button class="btn primary" id="focusStart">${focusRunning?'Pause':'Start'}</button><button class="btn" id="focusReset">Reset</button></div>
+  <div class="preset-builder"><div class="section-title">Create focus preset</div><div class="form preset-form"><input class="input" id="presetName" placeholder="Preset name"><input class="input" id="presetWork" type="number" min="1" max="180" placeholder="Focus min"><input class="input" id="presetBreak" type="number" min="0" max="60" placeholder="Break min"><input class="input" id="presetRounds" type="number" min="1" max="20" placeholder="Rounds"><button class="btn primary" id="addPreset">Save preset</button></div></div>
+  <div class="saved-presets"><div class="section-title">Saved presets</div><div class="list">${d.focusPresets.map(p=>`<div class="row"><span><b>${esc(p.name)}</b><small>${p.work} min focus · ${p.break} min break · ${p.rounds} rounds</small></span><span><button class="btn" data-focus-preset="${esc(p.id)}">Start</button> <button class="icon-btn" data-preset-delete="${esc(p.id)}">Delete</button></span></div>`).join('')||'<div class="empty">No saved presets.</div>'}</div></div>
+  <small>Each completed focus block rewards 15 XP and 5 coins.</small><h3 class="section-title">Recent sessions</h3><div class="list">${d.focusSessions.slice(-5).reverse().map(x=>`<div class="row"><span><b>${x.minutes} minute focus</b><small>${formatDate(x.date)}</small></span><span>+${x.xp} XP · +${x.coins} coins</span></div>`).join('')||'<div class="empty">No completed sessions yet.</div>'}</div></section>`; }
 function backup(d){return `<section class="card"><h2>Data & Backup</h2><p class="sub">Your progress is stored on this device. Export a backup before changing devices.</p><button class="btn primary" id="export">Export JSON</button> <label class="btn">Import JSON<input hidden id="import" type="file" accept="application/json"></label> <button class="btn danger" id="reset">Reset all data</button></section>`; }
 
-function startFocus(minutes){focusTotal=minutes*60;focusRemaining=focusTotal;focusRunning=true;clearInterval(focusTimer);focusTimer=setInterval(()=>{focusRemaining--;updateFocusDisplay();if(focusRemaining<=0)completeFocus();},1000);render(); }
+function startFocus(minutes){focusPlan=null;focusRound=1;focusMode='Focus';focusTotal=minutes*60;focusRemaining=focusTotal;runFocusTimer();render();}
+function startPreset(p){focusPlan=p;focusRound=1;focusMode='Focus';focusTotal=p.work*60;focusRemaining=focusTotal;runFocusTimer();render();}
+function runFocusTimer(){focusRunning=true;clearInterval(focusTimer);focusTimer=setInterval(()=>{focusRemaining--;updateFocusDisplay();if(focusRemaining<=0)completeFocusPhase();},1000);}
 function updateFocusDisplay(){const e=$('#focusDisplay');if(e){const m=Math.floor(focusRemaining/60),s=String(focusRemaining%60).padStart(2,'0');e.textContent=m+':'+s;}}
-function completeFocus(){clearInterval(focusTimer);focusRunning=false;const d=store.get().data;if(focusMode==='Focus'){d.xp+=15;d.coins+=5;d.focusSessions.push({id:'fs_'+Date.now(),minutes:Math.round(focusTotal/60),date:localDateKey(),xp:15,coins:5});save();toast('Focus session complete: +15 XP, +5 coins');}focusRemaining=0;render();}
-
+function completeFocusPhase(){clearInterval(focusTimer);focusRunning=false;if(focusMode==='Focus'){const d=store.get().data;d.xp+=15;d.coins+=5;d.focusSessions.push({id:'fs_'+Date.now(),minutes:Math.round(focusTotal/60),date:localDateKey(),xp:15,coins:5});save();toast('Focus block complete: +15 XP, +5 coins');if(focusPlan&&focusRound<focusPlan.rounds&&focusPlan.break>0){focusMode='Short Break';focusTotal=focusPlan.break*60;focusRemaining=focusTotal;runFocusTimer();render();return;}if(focusPlan&&focusRound<focusPlan.rounds){focusRound++;focusMode='Focus';focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();return;}if(focusPlan){focusPlan=null;focusRemaining=0;render();return;}}else if(focusPlan){focusRound++;focusMode='Focus';focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();return;}focusRemaining=0;render();}
 function bind(){
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;menuOpen=false;settingsOpen=false;render();});
   $('#menuBtn')?.addEventListener('click',e=>{e.stopPropagation();settingsOpen=false;toggleMenu();});
@@ -93,9 +103,12 @@ function bind(){
   document.querySelectorAll('[data-note-edit]').forEach(b=>b.onclick=()=>{const d=store.get().data,n=d.notes.find(x=>String(x.id)===b.dataset.noteEdit);if(!n)return;const title=prompt('Note title:',n.title);const body=prompt('Note text:',n.body);if(title!==null&&body!==null){n.title=title.trim()||'Untitled';n.body=body.trim();save();render();}});
   $('#addNote')?.addEventListener('click',()=>{const d=store.get().data,title=$('#noteTitle').value.trim(),body=$('#noteBody').value.trim();if(!title&&!body)return toast('Write something first');d.notes.unshift({id:'n_'+Date.now(),title:title||'Untitled',body,date:localDateKey(),pinned:false});save();render();toast('Note added');});
   document.querySelectorAll('[data-focus-min]').forEach(b=>b.onclick=()=>startFocus(Number(b.dataset.focusMin)));
-  document.querySelectorAll('[data-focus-mode]').forEach(b=>b.onclick=()=>{focusMode=b.dataset.focusMode;focusRemaining=0;focusRunning=false;clearInterval(focusTimer);render();});
-  $('#focusStart')?.addEventListener('click',()=>{if(focusRunning){focusRunning=false;clearInterval(focusTimer);render();}else{if(!focusRemaining)focusTotal=25*60,focusRemaining=focusTotal;focusRunning=true;clearInterval(focusTimer);focusTimer=setInterval(()=>{focusRemaining--;updateFocusDisplay();if(focusRemaining<=0)completeFocus();},1000);render();}});
-  $('#focusReset')?.addEventListener('click',()=>{focusRunning=false;focusRemaining=0;clearInterval(focusTimer);render();});
+  document.querySelectorAll('[data-focus-mode]').forEach(b=>b.onclick=()=>{clearInterval(focusTimer);focusPlan=null;focusMode=b.dataset.focusMode;focusRound=1;focusRunning=false;focusRemaining=0;render();});
+  document.querySelectorAll('[data-focus-preset]').forEach(b=>b.onclick=()=>{const p=store.get().data.focusPresets.find(x=>String(x.id)===b.dataset.focusPreset);if(p)startPreset(p);});
+  document.querySelectorAll('[data-preset-delete]').forEach(b=>b.onclick=()=>{const d=store.get().data;if(d.focusPresets.length<=1)return toast('Keep at least one preset');d.focusPresets=d.focusPresets.filter(x=>String(x.id)!==b.dataset.presetDelete);save();render();});
+  $('#addPreset')?.addEventListener('click',()=>{const d=store.get().data,n=$('#presetName').value.trim(),w=Number($('#presetWork').value),br=Number($('#presetBreak').value),ro=Number($('#presetRounds').value);if(!n||w<1||br<0||ro<1)return toast('Enter a name and valid preset values');d.focusPresets.push({id:'fp_'+Date.now(),name:n,work:Math.round(w),break:Math.round(br),rounds:Math.round(ro)});save();render();toast('Focus preset saved');});
+  $('#focusStart')?.addEventListener('click',()=>{if(focusRunning){focusRunning=false;clearInterval(focusTimer);render();}else{if(!focusRemaining){focusPlan=null;focusRound=1;focusMode='Focus';focusTotal=25*60;focusRemaining=focusTotal;}runFocusTimer();render();}});
+  $('#focusReset')?.addEventListener('click',()=>{focusRunning=false;focusPlan=null;focusRound=1;focusRemaining=0;clearInterval(focusTimer);render();});
   $('#export')?.addEventListener('click',()=>{exportBackup(store.get().data,store.get().completed);toast('Backup exported');});
   $('#import')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);if(!p.data?.routines)throw Error();if(confirm('Import this backup?')){store.replace(p.data,p.completed);save();render();toast('Backup imported');}}catch{toast('Could not import backup');}};r.readAsText(f);});
   $('#reset')?.addEventListener('click',()=>{if(confirm('Reset all In Track data?')){store.replace(clone(defaultData),{});save();render();toast('All data reset');}});
