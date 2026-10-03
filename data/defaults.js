@@ -10,7 +10,7 @@ export const defaultData={
     Evening:[{id:'e1',name:'Prepare for tomorrow',priority:'medium',difficulty:'medium'},{id:'e2',name:'Quick room reset',priority:'low',difficulty:'easy'}]
   },
   rewards:[{id:'r1',name:'1 hour gaming',cost:100,timeLimit:60},{id:'r2',name:'Movie night',cost:300,timeLimit:120}],
-  history:[],rewardHistory:[],notes:[],focusSessions:[],achievementRewards:[],focusPresets:[{id:'study',name:'Study',work:30,break:10,rounds:3}]
+  history:[],rewardHistory:[],activeRewards:[],notes:[],focusSessions:[],achievementRewards:[],focusPresets:[{id:'study',name:'Study',work:30,break:10,rounds:3}]
 };
 
 export const clone=x=>JSON.parse(JSON.stringify(x));
@@ -25,6 +25,7 @@ export function normalizeData(raw){
   d.history=Array.isArray(raw.history)?raw.history:[];
   d.history=d.history.map(h=>({...h,xpEarned:Number(h.xpEarned)||0,coinsEarned:Number(h.coinsEarned)||0}));
   d.rewardHistory=Array.isArray(raw.rewardHistory)?raw.rewardHistory:[];
+  d.activeRewards=Array.isArray(raw.activeRewards)?raw.activeRewards:[];
   d.notes=Array.isArray(raw.notes)?raw.notes:[];
   d.focusSessions=Array.isArray(raw.focusSessions)?raw.focusSessions:[];
   d.focusPresets=Array.isArray(raw.focusPresets)&&raw.focusPresets.length?raw.focusPresets:d.focusPresets;
