@@ -86,7 +86,7 @@ function today(s){
       <button class="btn primary" id="addTask">Add task</button>
     </div>
     <div class="form"><select class="input" id="deleteRoutineSelect">${Object.keys(d.routines).map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('')}</select><button class="btn danger" id="deleteRoutine">Delete selected routine</button></div>
-  </section>`;
+  </aside>`;
 }
 
 function routineSection(name,tasks){
