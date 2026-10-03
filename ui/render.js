@@ -44,7 +44,7 @@ function render(){
   const s=store.get(),d=s.data;
   document.querySelector('#app').innerHTML=`<div class="app">
     <header class="top">
-      <div><h1>Productivity RPG</h1><div class="sub">Build consistency. Complete quests. Earn rewards.</div></div>
+      <div><h1>In Track</h1><div class="sub">Build consistency. Complete quests. Earn rewards.</div></div>
       <div class="top-actions"><span class="save" id="saveStatus">Saved</span><button class="menu-btn" id="menuBtn" aria-expanded="${menuOpen}" aria-controls="menuPanel">Menu</button></div>
     </header>
     <div class="menu-backdrop ${menuOpen?'open':''}" id="menuBackdrop" aria-hidden="true"></div>
@@ -210,7 +210,7 @@ function bind(){
     r.onload=()=>{try{const p=JSON.parse(r.result);if(!p.data?.routines)throw Error();if(confirm('Import this backup?')){store.replace(p.data,p.completed);save();render();toast('Backup imported');}}catch{toast('Could not import backup');}};
     r.readAsText(f);
   });
-  $('#reset')?.addEventListener('click',()=>{if(confirm('Reset all Productivity RPG data?')){store.replace(clone(defaultData),{});save();render();toast('All data reset');}});
+  $('#reset')?.addEventListener('click',()=>{if(confirm('Reset all In Track data?')){store.replace(clone(defaultData),{});save();render();toast('All data reset');}});
 }
 
 async function init(){
