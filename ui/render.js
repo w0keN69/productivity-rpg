@@ -5,7 +5,7 @@ import {allTasks,levelFromXp,xpForLevel,xpToNextLevel,XP,toggleTask as gameToggl
 import {localDateKey,formatDate} from '../utils/date.js';
 
 const store=createStore();
-let view='Today',timer,menuOpen=false;
+let view='Today',timer,menuOpen=false,settingsOpen=false;
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
@@ -74,8 +74,9 @@ function today(s){
     <div class="legend"><span><i class="dot high"></i>High</span><span><i class="dot medium"></i>Medium</span><span><i class="dot low"></i>Low</span></div>
   </section>
 
-  <section class="card settings" id="settings">
-    <div class="card-head"><div><h3>Routine & Task Settings</h3><span class="sub">Manage routines and choose where new tasks are added.</span></div></div>
+  <div class="settings-backdrop ${settingsOpen?'open':''}" id="settingsBackdrop" aria-hidden="true"></div>
+  <aside class="settings-panel ${settingsOpen?'open':''}" id="settings" aria-label="Settings">
+    <div class="settings-panel-head"><div><h3>Settings</h3><span class="sub">Manage routines and tasks.</span></div><button class="icon-btn" id="settingsPanelClose">Close</button></div>
     <div class="form"><input class="input" id="newRoutine" placeholder="New routine name"><button class="btn primary" id="addRoutine">Add routine</button></div>
     <div class="form task-form">
       <select class="input" id="taskRoutine">${Object.keys(d.routines).map(r=>`<option value="${esc(r)}" ${r===d.selectedRoutine?'selected':''}>${esc(r)}</option>`).join('')}</select>
@@ -139,8 +140,8 @@ function backup(d){
 }
 
 function bind(){
-  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;menuOpen=false;render();});
-  $('#menuBtn')?.addEventListener('click',e=>{e.stopPropagation();toggleMenu();});
+  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;menuOpen=false;settingsOpen=false;render();});
+  $('#menuBtn')?.addEventListener('click',e=>{e.stopPropagation();settingsOpen=false;toggleMenu();});
   $('#menuBackdrop')?.addEventListener('click',()=>toggleMenu(false));
 
   document.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>{
@@ -162,7 +163,9 @@ function bind(){
     if(i>=0&&confirm('Delete this task?')){routine.splice(i,1);save();render();}
   });
 
-  $('#settingsBtn')?.addEventListener('click',()=>{const e=$('#settings');e.classList.toggle('open');if(e.classList.contains('open'))e.scrollIntoView({behavior:'smooth',block:'nearest'});});
+  $('#settingsBtn')?.addEventListener('click',()=>{settingsOpen=true;render();});
+  $('#settingsBackdrop')?.addEventListener('click',()=>{settingsOpen=false;render();});
+  $('#settingsPanelClose')?.addEventListener('click',()=>{settingsOpen=false;render();});
   $('#taskRoutine')?.addEventListener('change',e=>{store.get().data.selectedRoutine=e.target.value;save();});
 
   $('#addRoutine')?.addEventListener('click',()=>{
