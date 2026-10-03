@@ -29,11 +29,13 @@ function render(){
 
 function today(s){
   const d=s.data,l=levelFromXp(d.xp),current=xpForLevel(d.xp),next=xpToNextLevel(d.xp),routines=Object.entries(d.routines),todayQ=dailyQuestProgress(d,s.completed),weekQ=weeklyQuestProgress(d);
-  return `<section class="stats">
-    <div class="stat"><span>Level</span><b>${l}</b><small>${current} / ${current+next} XP</small></div>
+  return `<section class="stats-card">
+    <div class="stats-grid">
+      <div class="stat"><span>Level</span><b>${l}</b><small>${current} / ${current+next} XP</small></div>
     <div class="stat"><span>XP</span><b>${d.xp}</b><div class="progress"><i style="width:${Math.min(100,current/(current+next||1)*100)}%"></i></div></div>
     <div class="stat"><span>Coins</span><b>${d.coins}</b><small>Quest rewards</small></div>
     <div class="stat"><span>Streak</span><b>${d.streak} days</b><small>${todayQ.done}/${todayQ.total} today</small></div>
+    </div>
   </section>
   <section class="card">
     <div class="card-head"><div><h2>Today's Routines</h2></div><button class="btn" id="settingsBtn">Settings</button></div>
