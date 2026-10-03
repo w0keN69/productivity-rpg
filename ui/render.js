@@ -21,8 +21,8 @@ function render(){
   document.querySelector('#app').innerHTML=`<div class="app">
     <header class="top"><div><h1>In Track</h1></div><div class="top-actions"><span class="save" id="saveStatus">Saved</span><span class="coin-pill">${d.coins} coins</span><button class="menu-btn" id="menuBtn">Menu</button></div></header>
     <div class="menu-backdrop ${menuOpen?'open':''}" id="menuBackdrop"></div>
-    <nav class="menu-panel ${menuOpen?'open':''}" id="menuPanel">${['Today','Rewards','History','Achievements','Notes','Focus','Data & Backup'].map(x=>`<button class="menu-item ${view===x?'active':''}" data-view="${x}">${x}</button>`).join('')}</nav>
-    ${view==='Today'?today(s):view==='Rewards'?rewards(s):view==='History'?history(d):view==='Achievements'?achievements(s):view==='Notes'?notes(s):view==='Focus'?focus(s):backup(d)}
+    <nav class="menu-panel ${menuOpen?'open':''}" id="menuPanel">${['Today','Rewards','History','Achievements','Notes','Focus','Account'].map(x=>`<button class="menu-item ${view===x?'active':''}" data-view="${x}">${x}</button>`).join('')}</nav>
+    ${view==='Today'?today(s):view==='Rewards'?rewards(s):view==='History'?history(d):view==='Achievements'?achievements(s):view==='Notes'?notes(s):view==='Focus'?focus(s):account(d)}
   </div>`;
   bind();
 }
@@ -120,7 +120,17 @@ function focus(s){
   <div class="preset-builder"><div class="section-title">Create focus preset</div><div class="form preset-form"><input class="input" id="presetName" placeholder="Preset name"><input class="input" id="presetWork" type="number" min="1" max="180" placeholder="Focus min"><input class="input" id="presetBreak" type="number" min="0" max="60" placeholder="Break min"><input class="input" id="presetRounds" type="number" min="1" max="20" placeholder="Rounds"><button class="btn primary" id="addPreset">Save preset</button></div></div>
   <div class="saved-presets"><div class="section-title">Saved presets</div><div class="list">${d.focusPresets.map(p=>`<div class="row"><span><b>${esc(p.name)}</b><small>${p.work} min focus · ${p.break} min break · ${p.rounds} rounds</small></span><span><button class="btn" data-focus-preset="${esc(p.id)}">Start</button> <button class="icon-btn" data-preset-delete="${esc(p.id)}">Delete</button></span></div>`).join('')||'<div class="empty">No saved presets.</div>'}</div></div>
   <small>Each completed focus block rewards 15 XP and 5 coins.</small><h3 class="section-title">Recent sessions</h3><div class="list">${d.focusSessions.slice(-5).reverse().map(x=>`<div class="row"><span><b>${x.minutes} minute focus</b><small>${formatDate(x.date)}</small></span><span>+${x.xp} XP · +${x.coins} coins</span></div>`).join('')||'<div class="empty">No completed sessions yet.</div>'}</div></section>`; }
-function backup(d){return `<section class="card"><h2>Data & Backup</h2><p class="sub">Your progress is stored on this device. Export a backup before changing devices.</p><button class="btn primary" id="export">Export JSON</button> <label class="btn">Import JSON<input hidden id="import" type="file" accept="application/json"></label> <button class="btn danger" id="reset">Reset all data</button></section>`; }
+function account(d){
+  const hasProfile=!!d.profile?.name;
+  const created=d.profile?.createdAt?formatDateTime(d.profile.createdAt):'Not created';
+  const updated=d.profile?.updatedAt?formatDateTime(d.profile.updatedAt):'Not saved yet';
+  return `<section class="card account-card">
+    <div class="account-hero"><div class="profile-avatar">${hasProfile?esc(d.profile.name.trim().charAt(0).toUpperCase()):'I'}</div><div><h2>${hasProfile?esc(d.profile.name):'Your In Track Profile'}</h2><span class="sub">${hasProfile?'Local profile':'Create a profile to personalise your In Track experience.'}</span></div></div>
+    <div class="account-section"><div class="section-title">Profile</div><div class="form account-form"><input class="input" id="profileName" maxlength="40" value="${esc(d.profile?.name||'')}" placeholder="Your name"><button class="btn primary" id="saveProfile">${hasProfile?'Save profile':'Create profile'}</button></div><div class="account-meta"><span>Profile created</span><b>${created}</b><span>Last updated</span><b>${updated}</b></div></div>
+    <div class="account-section"><div class="section-title">Account status</div><div class="account-status"><span class="status-dot"></span><div><b>Local account</b><small>Your profile and progress are stored on this device.</small></div></div><div class="account-coming">Cloud sign-in and cross-device sync will be added in the next account stage.</div></div>
+    <div class="account-section"><div class="section-title">Backup & Data</div><p class="sub">Export your In Track progress before changing devices, or restore a previous backup.</p><div class="account-actions"><button class="btn primary" id="export">Export backup</button><label class="btn">Import backup<input hidden id="import" type="file" accept="application/json"></label><button class="btn danger" id="reset">Reset all data</button></div></div>
+  </section>`;
+}
 
 function startFocus(minutes){focusPlan=null;focusRound=1;focusMode='Focus';focusTotal=minutes*60;focusRemaining=focusTotal;runFocusTimer();render();}
 function startPreset(p){focusPlan=p;focusRound=1;focusMode='Focus';focusTotal=p.work*60;focusRemaining=focusTotal;runFocusTimer();render();}
@@ -154,6 +164,7 @@ function bind(){
   $('#focusStart')?.addEventListener('click',()=>{if(focusRunning){focusRunning=false;clearInterval(focusTimer);render();}else{if(!focusRemaining){focusPlan=null;focusRound=1;focusMode='Focus';focusTotal=25*60;focusRemaining=focusTotal;}runFocusTimer();render();}});
   $('#focusReset')?.addEventListener('click',()=>{focusRunning=false;focusPlan=null;focusRound=1;focusRemaining=0;clearInterval(focusTimer);render();});
   $('#focusSkip')?.addEventListener('click',()=>{clearInterval(focusTimer);focusRunning=false;focusMode='Focus';focusRound++;focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();});
+  $('#saveProfile')?.addEventListener('click',()=>{const d=store.get().data,name=$('#profileName').value.trim();if(!name)return toast('Enter your name first');const now=new Date().toISOString();if(!d.profile.createdAt)d.profile.createdAt=now;d.profile.name=name;d.profile.updatedAt=now;save();render();toast('Profile saved');});
   $('#export')?.addEventListener('click',()=>{exportBackup(store.get().data,store.get().completed);toast('Backup exported');});
   $('#import')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);if(p?.app!=='In Track'||!p.data?.routines||typeof p.data.routines!=='object')throw Error('Invalid backup');if(confirm('Import this In Track backup? Your current local progress will be replaced.')){store.replace(p.data,p.completed);save();render();toast('Backup imported');}}catch{toast('Could not import this backup.');}};r.readAsText(f);});
   $('#reset')?.addEventListener('click',()=>{if(confirm('Reset all In Track data?')){store.replace(clone(defaultData),{});save();render();toast('All data reset');}});
