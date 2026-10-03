@@ -35,10 +35,10 @@ export function refreshDailyState(data){
   return data;
 }
 export function milestoneBonus(streak){
-  if(streak>=30)return 100;
-  if(streak>=14)return 50;
-  if(streak>=7)return 25;
-  if(streak>=3)return 10;
+  if(streak===30)return 100;
+  if(streak===14)return 50;
+  if(streak===7)return 25;
+  if(streak===3)return 10;
   return 0;
 }
 export function dailyQuestProgress(data,completed){
@@ -47,7 +47,7 @@ export function dailyQuestProgress(data,completed){
 }
 export function weeklyQuestProgress(data){
   const current=weekKey(),days=data.history.filter(h=>weekKey(new Date(h.date+'T00:00:00'))===current).length;
-  const xpEarned=data.history.filter(h=>weekKey(new Date(h.date+'T00:00:00'))===current).reduce((sum,h)=>sum+h.xp,0);
+  const xpEarned=data.history.filter(h=>weekKey(new Date(h.date+'T00:00:00'))===current).reduce((sum,h)=>sum+(Number(h.xpEarned)||0),0);
   return {days,xpEarned};
 }
 export function achievementUnlocked(data,id){
@@ -80,7 +80,11 @@ export function toggleTask(data,completed,id){
     data.coins+=DAILY_BONUS; coinGain+=DAILY_BONUS; data.lastDailyBonusDate=localDateKey();
     data.streak=data.lastComplete===yesterdayKey()?data.streak+1:1; data.lastComplete=localDateKey();
     streakBonus=milestoneBonus(data.streak); data.coins+=streakBonus; coinGain+=streakBonus;
-    if(!data.history.some(h=>h.date===localDateKey()))data.history.push({date:localDateKey(),done:tasks.length,total:tasks.length,xp:data.xp,coins:data.coins,streak:data.streak});
+    if(!data.history.some(h=>h.date===localDateKey())){
+      const dailyXp=tasks.reduce((sum,t)=>sum+(XP[t.difficulty]||0),0);
+      const dailyCoins=tasks.reduce((sum,t)=>sum+(COINS[t.difficulty]||0),0)+DAILY_BONUS+streakBonus;
+      data.history.push({date:localDateKey(),done:tasks.length,total:tasks.length,xp:data.xp,coins:data.coins,streak:data.streak,xpEarned:dailyXp,coinsEarned:dailyCoins});
+    }
     bonus=true;
   }
   const newAchievements=grantNewAchievementRewards(data);
