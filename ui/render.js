@@ -6,7 +6,7 @@ import {localDateKey,formatDate} from '../utils/date.js';
 
 const store=createStore();
 let view='Today',timer,menuOpen=false,settingsOpen=false;
-let focusTimer=null,focusRemaining=0,focusTotal=0,focusRunning=false,focusMode='Focus',focusPlan=null,focusRound=1;
+let focusTimer=null,focusRemaining=0,focusTotal=0,focusRunning=false,focusMode='Focus',focusPlan=null,focusRound=1,rewardTimer=null;
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
@@ -41,9 +41,12 @@ function today(s){
     <div class="routine-list">${routines.map(([name,tasks])=>routineSection(name,tasks)).join('')||'<div class="empty">No routines yet.</div>'}</div>
     <div class="legend"><span><i class="dot high"></i>High</span><span><i class="dot medium"></i>Medium</span><span><i class="dot low"></i>Low</span></div>
   </section>
-  <section class="quest-grid">
-    <div class="mini-card"><div class="mini-head"><b>Daily Quest</b><span>${todayQ.done}/3</span></div><div class="mini-progress"><i style="width:${Math.min(100,todayQ.done/3*100)}%"></i></div><small>Complete 3 tasks today</small></div>
-    <div class="mini-card"><div class="mini-head"><b>Weekly Quest</b><span>${weekQ.xpEarned}/100 XP</span></div><div class="mini-progress"><i style="width:${Math.min(100,weekQ.xpEarned)}%"></i></div><small>Earn 100 XP this week</small></div>
+  <section class="card quest-card">
+    <div class="card-head"><div><h2>Quests</h2><span class="sub">Short-term goals that keep your progress moving.</span></div></div>
+    <div class="quest-list">
+      <div class="quest-item"><div class="quest-copy"><div class="mini-head"><b>Daily Quest</b><span>${todayQ.done}/3</span></div><small>Complete 3 tasks today</small></div><div class="mini-progress"><i style="width:${Math.min(100,todayQ.done/3*100)}%"></i></div></div>
+      <div class="quest-item"><div class="quest-copy"><div class="mini-head"><b>Weekly Quest</b><span>${weekQ.xpEarned}/100 XP</span></div><small>Earn 100 XP this week</small></div><div class="mini-progress"><i style="width:${Math.min(100,weekQ.xpEarned)}%"></i></div></div>
+    </div>
   </section>
   <div class="settings-backdrop ${settingsOpen?'open':''}" id="settingsBackdrop"></div>
   <aside class="settings-panel ${settingsOpen?'open':''}" id="settings">
@@ -56,14 +59,17 @@ function today(s){
 function routineSection(name,tasks){const doneN=tasks.filter(done).length,pct=tasks.length?Math.round(doneN/tasks.length*100):0;return `<section class="routine-section"><div class="routine-head"><div><h3>${esc(name)}</h3><span class="sub">${doneN}/${tasks.length} complete</span></div><span class="routine-percent">${pct}%</span></div><div class="routine-progress"><i style="width:${pct}%"></i></div>${tasks.length?tasks.map(taskRow).join(''):'<div class="routine-empty">No tasks in this routine.</div>'}</section>`;}
 function taskRow(t){return `<div class="task"><button class="check ${done(t)?'done':''}" data-task="${esc(t.id)}" aria-label="Complete ${esc(t.name)}"></button><div class="task-main"><div class="task-name ${done(t)?'done':''}">${esc(t.name)}</div><div class="meta"><i class="dot ${t.priority}"></i>${t.priority} · ${t.difficulty} · ${XP[t.difficulty]} XP</div></div><button class="icon-btn" data-edit="${esc(t.id)}">Edit</button><button class="icon-btn" data-delete="${esc(t.id)}">Delete</button></div>`;}
 
+function formatDateTime(iso){if(!iso)return '';const d=new Date(iso);if(Number.isNaN(d.getTime()))return '';return d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})+' · '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});}
+function formatRemaining(ms){const total=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),sec=total%60;return h?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');}
 function rewards(s){
-  const d=s.data,spent=d.rewardHistory.reduce((n,x)=>n+(Number(x.cost)||0),0),count=d.rewardHistory.length;
+  const d=s.data,spent=d.rewardHistory.reduce((n,x)=>n+(Number(x.cost)||0),0),count=d.rewardHistory.length,active=d.activeRewards.filter(x=>Number(x.expiresAt)>Date.now());
   return `<section class="card reward-card">
     <div class="card-head"><div><h2>Rewards Shop</h2><span class="sub">Turn earned coins into rewards you choose.</span></div><b>${d.coins} coins</b></div>
     <div class="reward-summary"><div><span>Redeemed</span><b>${count}</b></div><div><span>Coins spent</span><b>${spent}</b></div></div>
+    ${active.length?`<div class="active-rewards"><div class="section-title active-title">Active rewards</div>${active.map(x=>`<div class="active-reward"><div><b>${esc(x.name)}</b><small>Started ${formatDateTime(x.startedAt)}</small></div><strong data-reward-timer="${esc(x.id)}">${formatRemaining(Number(x.expiresAt)-Date.now())}</strong></div>`).join('')}</div>`:''}
     <div class="form"><input class="input" id="rewardName" placeholder="Reward name"><input class="input" id="rewardCost" type="number" min="1" placeholder="Coin cost"><input class="input" id="rewardTime" type="number" min="1" placeholder="Time limit (min)"><button class="btn primary" id="addReward">Add reward</button></div>
     <div class="list">${d.rewards.map(r=>{const affordable=d.coins>=r.cost;return `<div class="row reward-row"><div><b>${esc(r.name)}</b><div class="sub">${r.cost} coins${r.timeLimit?' · '+r.timeLimit+' min':''}</div></div><div class="reward-actions"><button class="btn ${affordable?'primary':''}" data-redeem="${esc(r.id)}" ${affordable?'':'disabled'}>${affordable?'Redeem':'Need '+(r.cost-d.coins)+' more'}</button><button class="icon-btn" data-reward-delete="${esc(r.id)}">Delete</button></div></div>`;}).join('')||'<div class="empty">No rewards yet.</div>'}</div>
-    ${d.rewardHistory.length?'<h3 class="section-title">Recent redemptions</h3><div class="list">'+d.rewardHistory.slice(-8).reverse().map(x=>`<div class="row"><span><b>${esc(x.name)}</b><small>${formatDate(x.date)}${x.timeLimit?' · '+x.timeLimit+' min':''}</small></span><b>-${x.cost}</b></div>`).join('')+'</div>':''}
+    ${d.rewardHistory.length?'<h3 class="section-title">Recent redemptions</h3><div class="list">'+d.rewardHistory.slice(-8).reverse().map(x=>`<div class="row reward-history-row"><div><b>${esc(x.name)}</b><small>${x.timeLimit?x.timeLimit+' min':''}</small></div><span class="reward-date">${formatDateTime(x.redeemedAt||x.date)}</span><b>-${x.cost}</b></div>`).join('')+'</div>':''}
   </section>`;
 }
 function history(d){
@@ -134,7 +140,7 @@ function bind(){
   $('#deleteRoutine')?.addEventListener('click',()=>{const d=store.get().data,n=Object.keys(d.routines),name=$('#deleteRoutineSelect').value;if(n.length<=1)return toast('Keep at least one routine');if(confirm('Delete '+name+'?')){delete d.routines[name];d.selectedRoutine=Object.keys(d.routines)[0];save();render();toast('Routine deleted');}});
   $('#addTask')?.addEventListener('click',()=>{const d=store.get().data,r=$('#taskRoutine').value,n=$('#taskName').value.trim();if(!n)return toast('Enter a task name');d.selectedRoutine=r;d.routines[r].push({id:'t_'+Date.now(),name:n,priority:$('#priority').value,difficulty:$('#difficulty').value});save();render();toast('Task added');});
   $('#addReward')?.addEventListener('click',()=>{const d=store.get().data,n=$('#rewardName').value.trim(),c=Number($('#rewardCost').value),t=Number($('#rewardTime').value)||null;if(!n||c<1)return toast('Enter a reward name and valid cost');d.rewards.push({id:'r_'+Date.now(),name:n,cost:Math.round(c),timeLimit:t});save();render();toast('Reward added');});
-  document.querySelectorAll('[data-redeem]').forEach(b=>b.onclick=()=>{const d=store.get().data,r=d.rewards.find(x=>String(x.id)===b.dataset.redeem);if(d.coins<r.cost)return toast('Not enough coins yet');d.coins-=r.cost;d.rewardHistory.push({id:'rh_'+Date.now(),name:r.name,cost:r.cost,timeLimit:r.timeLimit||null,date:localDateKey()});save();render();toast('Reward redeemed');});
+  document.querySelectorAll('[data-redeem]').forEach(b=>b.onclick=()=>{const d=store.get().data,r=d.rewards.find(x=>String(x.id)===b.dataset.redeem);if(!r)return;if(d.coins<r.cost)return toast('Not enough coins yet');const now=Date.now(),timeLimit=Number(r.timeLimit)||0;d.coins-=r.cost;d.rewardHistory.push({id:'rh_'+now,name:r.name,cost:r.cost,timeLimit:r.timeLimit||null,date:localDateKey(),redeemedAt:new Date(now).toISOString()});if(timeLimit>0)d.activeRewards.push({id:'ar_'+now,name:r.name,cost:r.cost,timeLimit,startedAt:new Date(now).toISOString(),expiresAt:now+timeLimit*60000});save();render();toast(timeLimit?'Reward redeemed: timer started':'Reward redeemed');});
   document.querySelectorAll('[data-reward-delete]').forEach(b=>b.onclick=()=>{const d=store.get().data;d.rewards=d.rewards.filter(x=>String(x.id)!==b.dataset.rewardDelete);save();render();toast('Reward deleted');});
   document.querySelectorAll('[data-note-pin]').forEach(b=>b.onclick=()=>{const n=store.get().data.notes.find(x=>String(x.id)===b.dataset.notePin);if(n){n.pinned=!n.pinned;save();render();}});
   document.querySelectorAll('[data-note-delete]').forEach(b=>b.onclick=()=>{const d=store.get().data;d.notes=d.notes.filter(x=>String(x.id)!==b.dataset.noteDelete);save();render();toast('Note deleted');});
@@ -151,6 +157,16 @@ function bind(){
   $('#export')?.addEventListener('click',()=>{exportBackup(store.get().data,store.get().completed);toast('Backup exported');});
   $('#import')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);if(p?.app!=='In Track'||!p.data?.routines||typeof p.data.routines!=='object')throw Error('Invalid backup');if(confirm('Import this In Track backup? Your current local progress will be replaced.')){store.replace(p.data,p.completed);save();render();toast('Backup imported');}}catch{toast('Could not import this backup.');}};r.readAsText(f);});
   $('#reset')?.addEventListener('click',()=>{if(confirm('Reset all In Track data?')){store.replace(clone(defaultData),{});save();render();toast('All data reset');}});
+  startRewardTicker();
+}
+function startRewardTicker(){
+  clearInterval(rewardTimer);
+  rewardTimer=setInterval(()=>{
+    const d=store.get().data,now=Date.now(),before=(d.activeRewards||[]).length;
+    d.activeRewards=(d.activeRewards||[]).filter(x=>Number(x.expiresAt)>now);
+    if(d.activeRewards.length!==before)save();
+    document.querySelectorAll('[data-reward-timer]').forEach(e=>{const x=d.activeRewards.find(x=>String(x.id)===e.dataset.rewardTimer);if(x)e.textContent=formatRemaining(Number(x.expiresAt)-now);});
+  },1000);
 }
 
 async function init(){
