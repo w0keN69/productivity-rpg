@@ -1,4 +1,4 @@
-# Productivity RPG
+# In Track
 
 A modular PWA for routines, quests, XP, coins, streaks, rewards, achievements, history, and JSON backup/restore.
 
@@ -11,7 +11,7 @@ A modular PWA for routines, quests, XP, coins, streaks, rewards, achievements, h
 - public/ PWA icons
 - root manifest.webmanifest and sw.js for correct root PWA scope
 
-Sticky Notes and Countdown are intentionally postponed until the core architecture is stable.
+Sticky Notes, Countdown, and profile/sign-in features are intentionally postponed until the core architecture is stable.
 
 ## GitHub Pages
 Enable Pages from repository Settings → Pages → Deploy from branch → main / root.
