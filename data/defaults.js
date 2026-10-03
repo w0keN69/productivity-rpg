@@ -2,7 +2,7 @@ export const STORAGE_KEY='productivityRPG_v2';
 export const STORAGE_VERSION=5;
 
 export const defaultData={
-  version:STORAGE_VERSION,xp:0,coins:0,streak:0,lastComplete:null,lastDailyBonusDate:null,
+  version:STORAGE_VERSION,profile:{name:'',createdAt:null,updatedAt:null},xp:0,coins:0,streak:0,lastComplete:null,lastDailyBonusDate:null,
   selectedRoutine:'Morning',
   routines:{
     Morning:[{id:'m1',name:'Wake up',priority:'high',difficulty:'easy'},{id:'m2',name:'Make bed',priority:'medium',difficulty:'easy'},{id:'m3',name:'Drink water',priority:'medium',difficulty:'easy'}],
@@ -19,6 +19,7 @@ export function normalizeData(raw){
   const d=clone(defaultData);
   if(!raw||typeof raw!=='object')return d;
   Object.assign(d,raw); d.version=STORAGE_VERSION;
+  d.profile=raw.profile&&typeof raw.profile==='object'?{name:String(raw.profile.name||''),createdAt:raw.profile.createdAt||null,updatedAt:raw.profile.updatedAt||null}:clone(defaultData.profile);
   d.xp=Math.max(0,Number(d.xp)||0); d.coins=Math.max(0,Number(d.coins)||0); d.streak=Math.max(0,Number(d.streak)||0);
   d.routines=raw.routines&&typeof raw.routines==='object'&&Object.keys(raw.routines).length?raw.routines:d.routines;
   d.rewards=Array.isArray(raw.rewards)?raw.rewards:d.rewards;
