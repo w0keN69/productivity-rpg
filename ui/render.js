@@ -44,7 +44,7 @@ function render(){
   const s=store.get(),d=s.data;
   document.querySelector('#app').innerHTML=`<div class="app">
     <header class="top">
-      <div><h1>In Track</h1><div class="sub">Build consistency. Complete quests. Earn rewards.</div></div>
+      <div><h1>In Track</h1></div>
       <div class="top-actions"><span class="save" id="saveStatus">Saved</span><button class="menu-btn" id="menuBtn" aria-expanded="${menuOpen}" aria-controls="menuPanel">Menu</button></div>
     </header>
     <div class="menu-backdrop ${menuOpen?'open':''}" id="menuBackdrop" aria-hidden="true"></div>
