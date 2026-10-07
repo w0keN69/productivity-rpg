@@ -35,7 +35,7 @@ export async function loadCloudState(session){
     if(routine){
       if(!routines[routine.name])routines[routine.name]=[];
       routines[routine.name].push({
-        id:t.local_id||t.id,name:t.name,priority:t.priority,difficulty:t.difficulty
+        id:t.local_id||t.id,cloudId:t.id,name:t.name,priority:t.priority,difficulty:t.difficulty
       });
     }
   }
