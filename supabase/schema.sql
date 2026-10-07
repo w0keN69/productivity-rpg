@@ -519,3 +519,59 @@ grant execute on function public.set_updated_at() to authenticated;
 
 -- The new-user trigger is SECURITY DEFINER and is invoked by auth.users.
 -- Do not grant direct execution of handle_new_user to normal clients.
+
+
+-- ------------------------------------------------------------
+-- Local migration support
+-- ------------------------------------------------------------
+-- local_id lets the browser safely repeat a migration without
+-- creating duplicate routines/tasks/rewards/notes/presets.
+alter table public.routines add column if not exists local_id text;
+alter table public.tasks add column if not exists local_id text;
+alter table public.rewards add column if not exists local_id text;
+alter table public.focus_presets add column if not exists local_id text;
+alter table public.notes add column if not exists local_id text;
+
+create unique index if not exists routines_user_local_id_idx
+  on public.routines(user_id, local_id) where local_id is not null;
+create unique index if not exists tasks_user_local_id_idx
+  on public.tasks(user_id, local_id) where local_id is not null;
+create unique index if not exists rewards_user_local_id_idx
+  on public.rewards(user_id, local_id) where local_id is not null;
+create unique index if not exists focus_presets_user_local_id_idx
+  on public.focus_presets(user_id, local_id) where local_id is not null;
+create unique index if not exists notes_user_local_id_idx
+  on public.notes(user_id, local_id) where local_id is not null;
+
+create table if not exists public.user_migrations (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  source_app text not null default 'In Track',
+  source_version integer not null default 1,
+  status text not null default 'pending'
+    check (status in ('pending','content_migrated','completed')),
+  protected_snapshot jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+alter table public.user_migrations enable row level security;
+
+create policy "Users can view own migration"
+on public.user_migrations for select
+to authenticated
+using ((select auth.uid()) = user_id);
+
+create policy "Users can create own migration"
+on public.user_migrations for insert
+to authenticated
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can update own migration"
+on public.user_migrations for update
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+drop trigger if exists user_migrations_updated_at on public.user_migrations;
+create trigger user_migrations_updated_at before update on public.user_migrations
+for each row execute procedure public.set_updated_at();
