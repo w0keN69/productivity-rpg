@@ -5,6 +5,8 @@ import {allTasks,levelFromXp,xpForLevel,xpToNextLevel,XP,toggleTask as gameToggl
 import {localDateKey,formatDate} from '../utils/date.js';
 import {getSession,signUp,signIn,signOut,isCloudConfigured,onAuthStateChange} from '../services/auth.js';
 import {inspectCloud,migrateLocalState} from '../services/migration.js';
+import {loadCloudState,saveCloudProfile,saveCloudNote,deleteCloudNote} from '../services/cloudSync.js';
+import {completeCloudTask} from '../services/cloudGame.js';
 
 const store=createStore();
 let authSession=null,authLoading=false;
@@ -60,7 +62,7 @@ function today(s){
   </aside>`;
 }
 function routineSection(name,tasks){const doneN=tasks.filter(done).length,pct=tasks.length?Math.round(doneN/tasks.length*100):0;return `<section class="routine-section"><div class="routine-head"><div><h3>${esc(name)}</h3><span class="sub">${doneN}/${tasks.length} complete</span></div><span class="routine-percent">${pct}%</span></div><div class="routine-progress"><i style="width:${pct}%"></i></div>${tasks.length?tasks.map(taskRow).join(''):'<div class="routine-empty">No tasks in this routine.</div>'}</section>`;}
-function taskRow(t){return `<div class="task"><button class="check ${done(t)?'done':''}" data-task="${esc(t.id)}" aria-label="Complete ${esc(t.name)}"></button><div class="task-main"><div class="task-name ${done(t)?'done':''}">${esc(t.name)}</div><div class="meta"><i class="dot ${t.priority}"></i>${t.priority} · ${t.difficulty} · ${XP[t.difficulty]} XP</div></div><button class="icon-btn" data-edit="${esc(t.id)}">Edit</button><button class="icon-btn" data-delete="${esc(t.id)}">Delete</button></div>`;}
+function taskRow(t){return `<div class="task"><button class="check ${done(t)?'done':''}" data-task="${esc(t.id)}" data-cloud-id="${esc(t.cloudId||t.id)}" aria-label="Complete ${esc(t.name)}"></button><div class="task-main"><div class="task-name ${done(t)?'done':''}">${esc(t.name)}</div><div class="meta"><i class="dot ${t.priority}"></i>${t.priority} · ${t.difficulty} · ${XP[t.difficulty]} XP</div></div><button class="icon-btn" data-edit="${esc(t.id)}">Edit</button><button class="icon-btn" data-delete="${esc(t.id)}">Delete</button></div>`;}
 
 function formatDateTime(iso){if(!iso)return '';const d=new Date(iso);if(Number.isNaN(d.getTime()))return '';return d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})+' · '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});}
 function formatRemaining(ms){const total=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),sec=total%60;return h?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');}
@@ -148,7 +150,7 @@ function bind(){
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;menuOpen=false;settingsOpen=false;render();});
   $('#menuBtn')?.addEventListener('click',e=>{e.stopPropagation();settingsOpen=false;toggleMenu();});
   $('#menuBackdrop')?.addEventListener('click',()=>toggleMenu(false));
-  document.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>{const s=store.get(),r=gameToggle(s.data,s.completed,b.dataset.task);store.set(s);save();render();if(r.newAchievements?.length){const names=r.newAchievements.map(a=>a.name).join(', ');toast('Achievement unlocked: '+names);}else if(r.levelUp)toast('Level up: '+r.newLevel);else if(r.bonus)toast('Daily complete: +'+r.coinGain+' coins');else if(r.xpGain>0)toast('Quest complete: +'+r.xpGain+' XP, +'+r.coinGain+' coins');else toast('Quest unchecked: rewards removed');});
+  document.querySelectorAll('[data-task]').forEach(b=>b.onclick=async()=>{const s=store.get();if(authSession){try{const result=await completeCloudTask(b.dataset.cloudId||b.dataset.task,localDateKey());const cloud=await loadCloudState(authSession);store.set({data:{...s.data,...cloud.data},completed:cloud.completed});await saveState(store.get().data,store.get().completed);render();toast(result.completed?'Quest complete: +'+result.xp_gain+' XP, +'+result.coin_gain+' coins':'Quest unchecked: rewards removed');}catch(e){toast(e.message||'Could not update cloud task');}}else{const r=gameToggle(s.data,s.completed,b.dataset.task);store.set(s);save();render();if(r.newAchievements?.length){const names=r.newAchievements.map(a=>a.name).join(', ');toast('Achievement unlocked: '+names);}else if(r.levelUp)toast('Level up: '+r.newLevel);else if(r.bonus)toast('Daily complete: +'+r.coinGain+' coins');else if(r.xpGain>0)toast('Quest complete: +'+r.xpGain+' XP, +'+r.coinGain+' coins');else toast('Quest unchecked: rewards removed');}});
   document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const s=store.get(),t=allTasks(s.data).find(x=>String(x.id)===b.dataset.edit),n=prompt('Task name:',t?.name||'');if(n?.trim()){t.name=n.trim();save();render();}});
   document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{const s=store.get(),routine=Object.values(s.data.routines).find(tasks=>tasks.some(t=>String(t.id)===b.dataset.delete)),i=routine?.findIndex(x=>String(x.id)===b.dataset.delete)??-1;if(i>=0&&confirm('Delete this task?')){routine.splice(i,1);save();render();}});
   $('#settingsBtn')?.addEventListener('click',()=>{settingsOpen=true;render();});$('#settingsBackdrop')?.addEventListener('click',()=>{settingsOpen=false;render();});$('#settingsPanelClose')?.addEventListener('click',()=>{settingsOpen=false;render();});
@@ -160,9 +162,9 @@ function bind(){
   document.querySelectorAll('[data-redeem]').forEach(b=>b.onclick=()=>{const d=store.get().data,r=d.rewards.find(x=>String(x.id)===b.dataset.redeem);if(!r)return;if(d.coins<r.cost)return toast('Not enough coins yet');const now=Date.now(),timeLimit=Number(r.timeLimit)||0;d.coins-=r.cost;d.rewardHistory.push({id:'rh_'+now,name:r.name,cost:r.cost,timeLimit:r.timeLimit||null,date:localDateKey(),redeemedAt:new Date(now).toISOString()});if(timeLimit>0)d.activeRewards.push({id:'ar_'+now,name:r.name,cost:r.cost,timeLimit,startedAt:new Date(now).toISOString(),expiresAt:now+timeLimit*60000});save();render();toast(timeLimit?'Reward redeemed: timer started':'Reward redeemed');});
   document.querySelectorAll('[data-reward-delete]').forEach(b=>b.onclick=()=>{const d=store.get().data;d.rewards=d.rewards.filter(x=>String(x.id)!==b.dataset.rewardDelete);save();render();toast('Reward deleted');});
   document.querySelectorAll('[data-note-pin]').forEach(b=>b.onclick=()=>{const n=store.get().data.notes.find(x=>String(x.id)===b.dataset.notePin);if(n){n.pinned=!n.pinned;save();render();}});
-  document.querySelectorAll('[data-note-delete]').forEach(b=>b.onclick=()=>{const d=store.get().data;d.notes=d.notes.filter(x=>String(x.id)!==b.dataset.noteDelete);save();render();toast('Note deleted');});
+  document.querySelectorAll('[data-note-delete]').forEach(b=>b.onclick=async()=>{const d=store.get().data;try{if(authSession)await deleteCloudNote(authSession,b.dataset.noteDelete);d.notes=d.notes.filter(x=>String(x.id)!==b.dataset.noteDelete);save();render();toast('Note deleted');}catch(e){toast(e.message||'Could not delete note');}});
   document.querySelectorAll('[data-note-edit]').forEach(b=>b.onclick=()=>{const d=store.get().data,n=d.notes.find(x=>String(x.id)===b.dataset.noteEdit);if(!n)return;const title=prompt('Note title:',n.title);const body=prompt('Note text:',n.body);if(title!==null&&body!==null){n.title=title.trim()||'Untitled';n.body=body.trim();save();render();}});
-  $('#addNote')?.addEventListener('click',()=>{const d=store.get().data,title=$('#noteTitle').value.trim(),body=$('#noteBody').value.trim();if(!title&&!body)return toast('Write something first');d.notes.unshift({id:'n_'+Date.now(),title:title||'Untitled',body,date:localDateKey(),pinned:false});save();render();toast('Note added');});
+  $('#addNote')?.addEventListener('click',async()=>{const d=store.get().data,title=$('#noteTitle').value.trim(),body=$('#noteBody').value.trim();if(!title&&!body)return toast('Write something first');const note={id:'n_'+Date.now(),title:title||'Untitled',body,date:localDateKey(),pinned:false};try{if(authSession)await saveCloudNote(authSession,note);d.notes.unshift(note);save();render();toast('Note added');}catch(e){toast(e.message||'Could not save note');}});
   document.querySelectorAll('[data-focus-min]').forEach(b=>b.onclick=()=>startFocus(Number(b.dataset.focusMin)));
   document.querySelectorAll('[data-focus-mode]').forEach(b=>b.onclick=()=>{clearInterval(focusTimer);focusPlan=null;focusMode=b.dataset.focusMode;focusRound=1;focusRunning=false;focusRemaining=0;render();});
   document.querySelectorAll('[data-focus-preset]').forEach(b=>b.onclick=()=>{const p=store.get().data.focusPresets.find(x=>String(x.id)===b.dataset.focusPreset);if(p)startPreset(p);});
@@ -171,7 +173,7 @@ function bind(){
   $('#focusStart')?.addEventListener('click',()=>{if(focusRunning){focusRunning=false;clearInterval(focusTimer);render();}else{if(!focusRemaining){focusPlan=null;focusRound=1;focusMode='Focus';focusTotal=25*60;focusRemaining=focusTotal;}runFocusTimer();render();}});
   $('#focusReset')?.addEventListener('click',()=>{focusRunning=false;focusPlan=null;focusRound=1;focusRemaining=0;clearInterval(focusTimer);render();});
   $('#focusSkip')?.addEventListener('click',()=>{clearInterval(focusTimer);focusRunning=false;focusMode='Focus';focusRound++;focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();});
-  $('#saveProfile')?.addEventListener('click',()=>{const d=store.get().data,name=$('#profileName').value.trim();if(!name)return toast('Enter your name first');const now=new Date().toISOString();if(!d.profile.createdAt)d.profile.createdAt=now;d.profile.name=name;d.profile.updatedAt=now;save();render();toast('Profile saved');});
+  $('#saveProfile')?.addEventListener('click',async()=>{const d=store.get().data,name=$('#profileName').value.trim();if(!name)return toast('Enter your name first');const now=new Date().toISOString();if(!d.profile.createdAt)d.profile.createdAt=now;d.profile.name=name;d.profile.updatedAt=now;try{if(authSession)await saveCloudProfile(authSession,name);save();render();toast(authSession?'Profile saved to cloud':'Profile saved');}catch(e){toast(e.message||'Could not save profile');}});
   $('#signIn')?.addEventListener('click',async()=>{try{const email=$('#authEmail').value.trim(),password=$('#authPassword').value;if(!email||!password)return toast('Enter your email and password');const result=await signIn(email,password);if(result.error)throw result.error;authSession=result.data.session;render();toast('Signed in');}catch(e){toast(e.message||'Could not sign in');}});
   $('#signUp')?.addEventListener('click',async()=>{try{const email=$('#authEmail').value.trim(),password=$('#authPassword').value;if(!email||!password)return toast('Enter your email and password');if(password.length<6)return toast('Password must be at least 6 characters');const result=await signUp(email,password,store.get().data.profile?.name||'');if(result.error)throw result.error;authSession=result.data.session||null;render();toast(result.data.session?'Account created':'Check your email to confirm your account');}catch(e){toast(e.message||'Could not create account');}});
   $('#signOut')?.addEventListener('click',async()=>{try{const result=await signOut();if(result.error)throw result.error;authSession=null;render();toast('Signed out');}catch(e){toast(e.message||'Could not sign out');}});
@@ -204,6 +206,16 @@ async function init(){
     refreshDailyState(saved.data);
     const completed=saved.completed&&typeof saved.completed==='object'?saved.completed:{};
     store.replace(saved.data,completed);
+  }
+  if(authSession){
+    try{
+      const cloud=await loadCloudState(authSession);
+      const current=store.get();
+      if(Object.keys(cloud.data.routines||{}).length){
+        store.set({data:{...current.data,...cloud.data,profile:current.data.profile},completed:cloud.completed});
+        await saveState(store.get().data,store.get().completed);
+      }
+    }catch(e){console.error('Cloud load failed',e);toast('Cloud data could not be loaded; local data is still available.');}
   }
   render();
 }
