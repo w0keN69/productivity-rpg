@@ -85,3 +85,70 @@ export async function deleteCloudNote(session,localId){
   const {error}=await client.from('notes').delete().eq('user_id',session.user.id).eq('local_id',localId);
   if(error)throw error;
 }
+
+
+export async function syncLocalContent(session,localData){
+  if(!session?.user?.id)throw new Error('Authentication required.');
+  const client=await requireClient(), userId=session.user.id;
+  const routines=Object.entries(localData.routines||{});
+  const routineRows=routines.map(([name],index)=>({
+    user_id:userId,local_id:'routine_'+index+'_'+String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,48),
+    name:String(name).trim(),sort_order:index,archived:false
+  }));
+
+  const {data:oldRoutines,error:oldRoutineError}=await client.from('routines').select('id,local_id').eq('user_id',userId);
+  if(oldRoutineError)throw oldRoutineError;
+  const wantedRoutineIds=new Set(routineRows.map(r=>r.local_id));
+  const staleRoutines=(oldRoutines||[]).filter(r=>r.local_id&&!wantedRoutineIds.has(r.local_id)).map(r=>r.id);
+  if(staleRoutines.length){
+    const {error}=await client.from('routines').delete().eq('user_id',userId).in('id',staleRoutines);
+    if(error)throw error;
+  }
+  if(routineRows.length){
+    const {error}=await client.from('routines').upsert(routineRows,{onConflict:'user_id,local_id'});
+    if(error)throw error;
+  }
+
+  const {data:cloudRoutines,error:crError}=await client.from('routines').select('id,local_id').eq('user_id',userId);
+  if(crError)throw crError;
+  const routineMap=new Map((cloudRoutines||[]).map(r=>[r.local_id,r.id]));
+  const taskRows=[];
+  routines.forEach(([name,tasks],ri)=>{
+    const rid=routineMap.get(routineRows[ri].local_id);
+    (tasks||[]).forEach((t,i)=>taskRows.push({
+      user_id:userId,local_id:String(t.id),routine_id:rid,name:String(t.name||'').trim(),
+      priority:t.priority||'medium',difficulty:t.difficulty||'easy',
+      xp_reward:t.difficulty==='hard'?20:t.difficulty==='medium'?10:5,
+      coin_reward:t.difficulty==='hard'?10:t.difficulty==='medium'?5:2,
+      sort_order:i,archived:false
+    }));
+  });
+
+  const {data:oldTasks,error:oldTaskError}=await client.from('tasks').select('id,local_id').eq('user_id',userId);
+  if(oldTaskError)throw oldTaskError;
+  const wantedTaskIds=new Set(taskRows.map(t=>t.local_id));
+  const staleTasks=(oldTasks||[]).filter(t=>t.local_id&&!wantedTaskIds.has(t.local_id)).map(t=>t.id);
+  if(staleTasks.length){
+    const {error}=await client.from('tasks').delete().eq('user_id',userId).in('id',staleTasks);
+    if(error)throw error;
+  }
+  if(taskRows.length){
+    const {error}=await client.from('tasks').upsert(taskRows,{onConflict:'user_id,local_id'});
+    if(error)throw error;
+  }
+
+  const collections=[
+    ['rewards',(localData.rewards||[]).map((r,i)=>({user_id:userId,local_id:String(r.id||'r_'+i),name:String(r.name||'').trim(),coin_cost:Number(r.cost)||1,time_limit_minutes:Number(r.timeLimit)||null,active:true}))],
+    ['focus_presets',(localData.focusPresets||[]).map((p,i)=>({user_id:userId,local_id:String(p.id||'fp_'+i),name:String(p.name||'').trim(),focus_minutes:Number(p.work)||1,break_minutes:Number(p.break)||0,rounds:Number(p.rounds)||1}))],
+    ['notes',(localData.notes||[]).map((n,i)=>({user_id:userId,local_id:String(n.id||'n_'+i),title:String(n.title||'').slice(0,120),body:String(n.body||''),pinned:!!n.pinned,archived:false}))]
+  ];
+  for(const [table,rows] of collections){
+    const {data:old,error:oldError}=await client.from(table).select('id,local_id').eq('user_id',userId);
+    if(oldError)throw oldError;
+    const wanted=new Set(rows.map(x=>x.local_id));
+    const stale=(old||[]).filter(x=>x.local_id&&!wanted.has(x.local_id)).map(x=>x.id);
+    if(stale.length){const {error}=await client.from(table).delete().eq('user_id',userId).in('id',stale);if(error)throw error;}
+    if(rows.length){const {error}=await client.from(table).upsert(rows,{onConflict:'user_id,local_id'});if(error)throw error;}
+  }
+  return {synced:true,routines:routineRows.length,tasks:taskRows.length};
+}
