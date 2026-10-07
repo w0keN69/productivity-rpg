@@ -5,7 +5,7 @@ import {allTasks,levelFromXp,xpForLevel,xpToNextLevel,XP,toggleTask as gameToggl
 import {localDateKey,formatDate} from '../utils/date.js';
 import {getSession,signUp,signIn,signOut,isCloudConfigured,onAuthStateChange} from '../services/auth.js';
 import {inspectCloud,migrateLocalState} from '../services/migration.js';
-import {loadCloudState,saveCloudProfile,saveCloudNote,deleteCloudNote} from '../services/cloudSync.js';
+import {loadCloudState,saveCloudProfile,saveCloudNote,deleteCloudNote,syncLocalContent} from '../services/cloudSync.js';
 import {completeCloudTask} from '../services/cloudGame.js';
 
 const store=createStore();
@@ -17,7 +17,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 
 function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('show'),2800);}
-function save(){clearTimeout(timer);const status=$('#saveStatus');if(status)status.textContent='Saving…';timer=setTimeout(async()=>{await saveState(store.get().data,store.get().completed);if($('#saveStatus'))$('#saveStatus').textContent='Saved';},150);}
+function save(){clearTimeout(timer);const status=$('#saveStatus');if(status)status.textContent='Saving…';timer=setTimeout(async()=>{await saveState(store.get().data,store.get().completed);if(authSession){try{await syncLocalContent(authSession,store.get().data);}catch(e){console.error('Cloud content sync failed',e);if($('#saveStatus'))$('#saveStatus').textContent='Local only';}}if($('#saveStatus'))$('#saveStatus').textContent=authSession?'Synced':'Saved';},150);}
 function done(t){return !!store.get().completed[localDateKey()+'_'+t.id];}
 function toggleMenu(force){menuOpen=typeof force==='boolean'?force:!menuOpen;const p=$('#menuPanel'),b=$('#menuBackdrop');if(p)p.classList.toggle('open',menuOpen);if(b)b.classList.toggle('open',menuOpen);$('#menuBtn')?.setAttribute('aria-expanded',String(menuOpen));}
 
