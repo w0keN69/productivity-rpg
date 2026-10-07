@@ -407,11 +407,8 @@ on public.player_stats for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
-create policy "Users can update own player stats"
-on public.player_stats for update
-to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+-- Player XP/coins are intentionally not client-writable.
+-- They will be changed through trusted server-side gameplay RPCs.
 
 -- Streaks
 create policy "Users can view own streak"
@@ -419,11 +416,8 @@ on public.streaks for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
-create policy "Users can update own streak"
-on public.streaks for update
-to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+-- Streaks are intentionally not client-writable.
+-- They will be calculated by trusted server-side gameplay logic.
 
 -- User-owned CRUD tables
 create policy "Users can manage own routines"
@@ -438,29 +432,25 @@ to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
-create policy "Users can manage own task completions"
-on public.task_completions for all
+create policy "Users can view own task completions"
+on public.task_completions for select
 to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+using ((select auth.uid()) = user_id);
 
-create policy "Users can manage own daily progress"
-on public.daily_progress for all
+create policy "Users can view own daily progress"
+on public.daily_progress for select
 to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+using ((select auth.uid()) = user_id);
 
-create policy "Users can manage own quests"
-on public.quests for all
+create policy "Users can view own quests"
+on public.quests for select
 to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+using ((select auth.uid()) = user_id);
 
-create policy "Users can manage own user achievements"
-on public.user_achievements for all
+create policy "Users can view own user achievements"
+on public.user_achievements for select
 to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+using ((select auth.uid()) = user_id);
 
 create policy "Users can manage own rewards"
 on public.rewards for all
@@ -468,11 +458,10 @@ to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
-create policy "Users can manage own reward redemptions"
-on public.reward_redemptions for all
+create policy "Users can view own reward redemptions"
+on public.reward_redemptions for select
 to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+using ((select auth.uid()) = user_id);
 
 create policy "Users can manage own focus presets"
 on public.focus_presets for all
@@ -480,11 +469,10 @@ to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
-create policy "Users can manage own focus sessions"
-on public.focus_sessions for all
+create policy "Users can view own focus sessions"
+on public.focus_sessions for select
 to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+using ((select auth.uid()) = user_id);
 
 create policy "Users can manage own notes"
 on public.notes for all
@@ -524,6 +512,10 @@ on conflict (id) do nothing;
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant execute on function public.set_updated_at() to authenticated;
+
+-- Gameplay/event tables are read-only from the client. Server-side RPCs will
+-- atomically validate the action and update XP, coins, streaks and history.
+-- This prevents clients from simply granting themselves rewards.
 
 -- The new-user trigger is SECURITY DEFINER and is invoked by auth.users.
 -- Do not grant direct execution of handle_new_user to normal clients.
