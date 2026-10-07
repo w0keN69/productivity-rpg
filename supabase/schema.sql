@@ -756,3 +756,137 @@ as $$
 $$;
 
 grant execute on function public.get_player_state() to authenticated;
+
+
+-- ------------------------------------------------------------
+-- Secure rewards, focus and achievement gameplay
+-- ------------------------------------------------------------
+
+create or replace function public.redeem_reward(p_reward_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_reward public.rewards%rowtype;
+  v_coins bigint;
+  v_redemption uuid;
+  v_expires timestamptz;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+
+  select * into v_reward from public.rewards
+  where id=p_reward_id and user_id=v_user and active=true;
+  if not found then raise exception 'Reward not found'; end if;
+
+  select coins into v_coins from public.player_stats where user_id=v_user for update;
+  if coalesce(v_coins,0) < v_reward.coin_cost then raise exception 'Not enough coins'; end if;
+
+  if v_reward.time_limit_minutes is not null then
+    v_expires:=timezone('utc',now()) + make_interval(mins=>v_reward.time_limit_minutes);
+  end if;
+
+  update public.player_stats set coins=coins-v_reward.coin_cost where user_id=v_user;
+
+  insert into public.reward_redemptions(
+    user_id,reward_id,reward_name,coin_cost,time_limit_minutes,expires_at
+  ) values(
+    v_user,p_reward_id,v_reward.name,v_reward.coin_cost,v_reward.time_limit_minutes,v_expires
+  ) returning id into v_redemption;
+
+  return jsonb_build_object(
+    'id',v_redemption,'name',v_reward.name,'cost',v_reward.coin_cost,
+    'time_limit',v_reward.time_limit_minutes,'redeemed_at',timezone('utc',now()),
+    'expires_at',v_expires
+  );
+end;
+$$;
+
+revoke all on function public.redeem_reward(uuid) from public;
+grant execute on function public.redeem_reward(uuid) to authenticated;
+
+create or replace function public.complete_focus_session(
+  p_preset_id uuid default null,
+  p_minutes integer default 25,
+  p_round integer default 1
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_id uuid;
+  v_xp integer := 15;
+  v_coins integer := 5;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+  if p_minutes < 1 or p_minutes > 180 then raise exception 'Invalid focus duration'; end if;
+  if p_round < 1 then raise exception 'Invalid round'; end if;
+
+  if p_preset_id is not null and not exists(
+    select 1 from public.focus_presets where id=p_preset_id and user_id=v_user
+  ) then raise exception 'Focus preset not found'; end if;
+
+  insert into public.focus_sessions(
+    user_id,preset_id,focus_minutes,round_number,completed_at,xp_earned,coins_earned
+  ) values(
+    v_user,p_preset_id,p_minutes,p_round,timezone('utc',now()),v_xp,v_coins
+  ) returning id into v_id;
+
+  update public.player_stats
+    set xp=xp+v_xp,coins=coins+v_coins
+    where user_id=v_user;
+
+  return jsonb_build_object(
+    'id',v_id,'minutes',p_minutes,'round',p_round,
+    'xp_gain',v_xp,'coin_gain',v_coins
+  );
+end;
+$$;
+
+revoke all on function public.complete_focus_session(uuid,integer,integer) from public;
+grant execute on function public.complete_focus_session(uuid,integer,integer) to authenticated;
+
+create or replace function public.unlock_achievement(p_achievement_id text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_def public.achievement_definitions%rowtype;
+  v_xp integer;
+  v_coins integer;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+
+  select * into v_def from public.achievement_definitions where id=p_achievement_id;
+  if not found then raise exception 'Achievement not found'; end if;
+
+  if exists(select 1 from public.user_achievements where user_id=v_user and achievement_id=p_achievement_id)
+    then return jsonb_build_object('unlocked',false,'already_unlocked',true); end if;
+
+  select xp_reward,coin_reward into v_xp,v_coins from public.achievement_definitions
+  where id=p_achievement_id;
+
+  insert into public.user_achievements(user_id,achievement_id)
+  values(v_user,p_achievement_id);
+
+  update public.player_stats
+    set xp=xp+coalesce(v_xp,0),coins=coins+coalesce(v_coins,0)
+    where user_id=v_user;
+
+  return jsonb_build_object(
+    'unlocked',true,'achievement_id',p_achievement_id,
+    'xp_gain',coalesce(v_xp,0),'coin_gain',coalesce(v_coins,0)
+  );
+end;
+$$;
+
+revoke all on function public.unlock_achievement(text) from public;
+grant execute on function public.unlock_achievement(text) to authenticated;
