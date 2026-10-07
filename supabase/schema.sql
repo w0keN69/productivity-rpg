@@ -533,15 +533,15 @@ alter table public.focus_presets add column if not exists local_id text;
 alter table public.notes add column if not exists local_id text;
 
 create unique index if not exists routines_user_local_id_idx
-  on public.routines(user_id, local_id) where local_id is not null;
+  on public.routines(user_id, local_id);
 create unique index if not exists tasks_user_local_id_idx
-  on public.tasks(user_id, local_id) where local_id is not null;
+  on public.tasks(user_id, local_id);
 create unique index if not exists rewards_user_local_id_idx
-  on public.rewards(user_id, local_id) where local_id is not null;
+  on public.rewards(user_id, local_id);
 create unique index if not exists focus_presets_user_local_id_idx
-  on public.focus_presets(user_id, local_id) where local_id is not null;
+  on public.focus_presets(user_id, local_id);
 create unique index if not exists notes_user_local_id_idx
-  on public.notes(user_id, local_id) where local_id is not null;
+  on public.notes(user_id, local_id);
 
 create table if not exists public.user_migrations (
   user_id uuid primary key references auth.users(id) on delete cascade,
