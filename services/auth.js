@@ -3,7 +3,7 @@
 // Configure window.INTRACK_SUPABASE_CONFIG before enabling cloud auth.
 
 let clientPromise=null;
-async function getClient(){
+export async function getClient(){
   const cfg=window.INTRACK_SUPABASE_CONFIG;
   if(!cfg?.url||!cfg?.anonKey)return null;
   if(!clientPromise){
