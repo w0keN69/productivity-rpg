@@ -3,8 +3,10 @@ import {defaultData,clone} from '../data/defaults.js';
 import {loadState,saveState,exportBackup,persistStorage} from '../services/storage.js';
 import {allTasks,levelFromXp,xpForLevel,xpToNextLevel,XP,toggleTask as gameToggle,refreshDailyState,ACHIEVEMENTS,dailyQuestProgress,weeklyQuestProgress,weekKey} from '../services/game.js';
 import {localDateKey,formatDate} from '../utils/date.js';
+import {getSession,signUp,signIn,signOut,isCloudConfigured,onAuthStateChange} from '../services/auth.js';
 
 const store=createStore();
+let authSession=null,authLoading=false;
 let view='Today',timer,menuOpen=false,settingsOpen=false;
 let focusTimer=null,focusRemaining=0,focusTotal=0,focusRunning=false,focusMode='Focus',focusPlan=null,focusRound=1,rewardTimer=null;
 
@@ -121,17 +123,17 @@ function focus(s){
   <div class="saved-presets"><div class="section-title">Saved presets</div><div class="list">${d.focusPresets.map(p=>`<div class="focus-preset-row"><div class="focus-preset-main"><b>${esc(p.name)}</b><small>${p.work} min focus · ${p.break} min break · ${p.rounds} rounds</small></div><div class="focus-preset-actions"><button class="btn" data-focus-preset="${esc(p.id)}">Start</button><button class="icon-btn" data-preset-delete="${esc(p.id)}">Delete</button></div></div>`).join('')||'<div class="empty">No saved presets.</div>'}</div></div>
   <small>Each completed focus block rewards 15 XP and 5 coins.</small><h3 class="section-title">Recent sessions</h3><div class="list">${d.focusSessions.slice(-5).reverse().map(x=>`<div class="row"><span><b>${x.minutes} minute focus</b><small>${formatDate(x.date)}</small></span><span>+${x.xp} XP · +${x.coins} coins</span></div>`).join('')||'<div class="empty">No completed sessions yet.</div>'}</div></section>`; }
 function account(d){
-  const hasProfile=!!d.profile?.name;
-  const created=d.profile?.createdAt?formatDateTime(d.profile.createdAt):'Not created';
-  const updated=d.profile?.updatedAt?formatDateTime(d.profile.updatedAt):'Not saved yet';
+  const hasProfile=!!d.profile?.name,cloud=isCloudConfigured(),signedIn=!!authSession;
+  const authStatus='<div class="account-status"><span class="status-dot"></span><div><b>'+ (signedIn?'Cloud account connected':cloud?'Cloud account ready':'Local account') +'</b><small>'+ (signedIn?esc(authSession.user.email||'Signed in'):cloud?'Supabase is configured. Sign in or create an account below.':'Your profile and progress are stored on this device.') +'</small></div></div>';
+  const authBox=cloud?(signedIn?'<div class="auth-box"><button class="btn" id="signOut">Sign out</button></div>':'<div class="auth-box"><div class="auth-form"><input class="input" id="authEmail" type="email" autocomplete="email" placeholder="Email address"><input class="input" id="authPassword" type="password" autocomplete="current-password" placeholder="Password"><div class="auth-actions"><button class="btn primary" id="signIn">Sign in</button><button class="btn" id="signUp">Create account</button></div></div></div>'):'<div class="account-coming">Cloud authentication is not configured yet. Your local profile continues to work normally.</div>';
+  const created=d.profile?.createdAt?formatDateTime(d.profile.createdAt):'Not created',updated=d.profile?.updatedAt?formatDateTime(d.profile.updatedAt):'Not saved yet';
   return `<section class="card account-card">
     <div class="account-hero"><div class="profile-avatar">${hasProfile?esc(d.profile.name.trim().charAt(0).toUpperCase()):'I'}</div><div><h2>${hasProfile?esc(d.profile.name):'Your In Track Profile'}</h2><span class="sub">${hasProfile?'Local profile':'Create a profile to personalise your In Track experience.'}</span></div></div>
     <div class="account-section"><div class="section-title">Profile</div><div class="form account-form"><input class="input" id="profileName" maxlength="40" value="${esc(d.profile?.name||'')}" placeholder="Your name"><button class="btn primary" id="saveProfile">${hasProfile?'Save profile':'Create profile'}</button></div><div class="account-meta"><span>Profile created</span><b>${created}</b><span>Last updated</span><b>${updated}</b></div></div>
-    <div class="account-section"><div class="section-title">Account status</div><div class="account-status"><span class="status-dot"></span><div><b>Local account</b><small>Your profile and progress are stored on this device.</small></div></div><div class="account-coming">Cloud sign-in and cross-device sync will be added in the next account stage.</div></div>
+    <div class="account-section"><div class="section-title">Account</div>${authStatus}${authBox}</div>
     <div class="account-section"><div class="section-title">Backup & Data</div><p class="sub">Export your In Track progress before changing devices, or restore a previous backup.</p><div class="account-actions"><button class="btn primary" id="export">Export backup</button><label class="btn">Import backup<input hidden id="import" type="file" accept="application/json"></label><button class="btn danger" id="reset">Reset all data</button></div></div>
   </section>`;
 }
-
 function startFocus(minutes){focusPlan=null;focusRound=1;focusMode='Focus';focusTotal=minutes*60;focusRemaining=focusTotal;runFocusTimer();render();}
 function startPreset(p){focusPlan=p;focusRound=1;focusMode='Focus';focusTotal=p.work*60;focusRemaining=focusTotal;runFocusTimer();render();}
 function runFocusTimer(){focusRunning=true;clearInterval(focusTimer);focusTimer=setInterval(()=>{focusRemaining--;updateFocusDisplay();if(focusRemaining<=0)completeFocusPhase();},1000);}
@@ -165,6 +167,10 @@ function bind(){
   $('#focusReset')?.addEventListener('click',()=>{focusRunning=false;focusPlan=null;focusRound=1;focusRemaining=0;clearInterval(focusTimer);render();});
   $('#focusSkip')?.addEventListener('click',()=>{clearInterval(focusTimer);focusRunning=false;focusMode='Focus';focusRound++;focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();});
   $('#saveProfile')?.addEventListener('click',()=>{const d=store.get().data,name=$('#profileName').value.trim();if(!name)return toast('Enter your name first');const now=new Date().toISOString();if(!d.profile.createdAt)d.profile.createdAt=now;d.profile.name=name;d.profile.updatedAt=now;save();render();toast('Profile saved');});
+  $('#signIn')?.addEventListener('click',async()=>{if(authLoading)return;const email=$('#authEmail').value.trim(),password=$('#authPassword').value;if(!email||password.length<6)return toast('Enter a valid email and password');authLoading=true;try{const result=await signIn(email,password);if(result.error)throw result.error;authSession=result.data.session;render();toast('Signed in');}catch(e){toast(e.message||'Could not sign in');}finally{authLoading=false;}});
+  $('#signUp')?.addEventListener('click',async()=>{if(authLoading)return;const email=$('#authEmail').value.trim(),password=$('#authPassword').value,name=$('#profileName')?.value.trim()||'';if(!email||password.length<6)return toast('Use an email and a password of at least 6 characters');authLoading=true;try{const result=await signUp(email,password,name);if(result.error)throw result.error;toast(result.data.session?'Account created and signed in':'Account created. Check your email to confirm it.');if(result.data.session)authSession=result.data.session;render();}catch(e){toast(e.message||'Could not create account');}finally{authLoading=false;}});
+  $('#signOut')?.addEventListener('click',async()=>{try{const result=await signOut();if(result.error)throw result.error;authSession=null;render();toast('Signed out');}catch(e){toast(e.message||'Could not sign out');}});
+
   $('#export')?.addEventListener('click',()=>{exportBackup(store.get().data,store.get().completed);toast('Backup exported');});
   $('#import')?.addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);if(p?.app!=='In Track'||!p.data?.routines||typeof p.data.routines!=='object')throw Error('Invalid backup');if(confirm('Import this In Track backup? Your current local progress will be replaced.')){store.replace(p.data,p.completed);save();render();toast('Backup imported');}}catch{toast('Could not import this backup.');}};r.readAsText(f);});
   $('#reset')?.addEventListener('click',()=>{if(confirm('Reset all In Track data?')){store.replace(clone(defaultData),{});save();render();toast('All data reset');}});
@@ -182,6 +188,7 @@ function startRewardTicker(){
 
 async function init(){
   await persistStorage();
+  if(isCloudConfigured()){try{authSession=await getSession();await onAuthStateChange(session=>{authSession=session;render();});}catch(e){console.error(e);}}
   const saved=await loadState();
   if(saved?.data){
     refreshDailyState(saved.data);
