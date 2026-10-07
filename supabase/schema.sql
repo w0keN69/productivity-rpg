@@ -575,3 +575,184 @@ with check ((select auth.uid()) = user_id);
 drop trigger if exists user_migrations_updated_at on public.user_migrations;
 create trigger user_migrations_updated_at before update on public.user_migrations
 for each row execute procedure public.set_updated_at();
+
+
+-- ------------------------------------------------------------
+-- Trusted gameplay RPCs
+-- ------------------------------------------------------------
+-- The browser calls these functions instead of directly changing
+-- player_stats, streaks, or task_completions.
+
+create or replace function public.complete_task(
+  p_task_id uuid,
+  p_completion_date date default current_date
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_task public.tasks%rowtype;
+  v_existing public.task_completions%rowtype;
+  v_xp integer;
+  v_coins integer;
+  v_completed integer;
+  v_total integer;
+  v_daily_bonus integer := 0;
+  v_streak_bonus integer := 0;
+  v_streak integer;
+  v_last date;
+begin
+  if v_user is null then
+    raise exception 'Authentication required';
+  end if;
+
+  select * into v_task
+  from public.tasks
+  where id = p_task_id and user_id = v_user and archived = false;
+
+  if not found then
+    raise exception 'Task not found';
+  end if;
+
+  v_xp := v_task.xp_reward;
+  v_coins := v_task.coin_reward;
+
+  select * into v_existing
+  from public.task_completions
+  where user_id = v_user
+    and task_id = p_task_id
+    and completion_date = p_completion_date
+  limit 1;
+
+  if found then
+    delete from public.task_completions where id = v_existing.id;
+    update public.player_stats
+      set xp = greatest(0, xp - v_xp),
+          coins = greatest(0, coins - v_coins)
+      where user_id = v_user;
+
+    update public.daily_progress
+      set tasks_completed = greatest(0, tasks_completed - 1),
+          xp_earned = greatest(0, xp_earned - v_xp),
+          coins_earned = greatest(0, coins_earned - v_coins)
+      where user_id = v_user and progress_date = p_completion_date;
+
+    return jsonb_build_object(
+      'completed', false,
+      'xp_gain', -v_xp,
+      'coin_gain', -v_coins
+    );
+  end if;
+
+  insert into public.task_completions(
+    user_id, task_id, completed_at, completion_date, xp_earned, coins_earned
+  )
+  values(v_user, p_task_id, timezone('utc', now()), p_completion_date, v_xp, v_coins);
+
+  update public.player_stats
+    set xp = xp + v_xp,
+        coins = coins + v_coins
+    where user_id = v_user;
+
+  select count(*) into v_completed
+  from public.task_completions tc
+  join public.tasks t on t.id = tc.task_id
+  where tc.user_id = v_user
+    and tc.completion_date = p_completion_date
+    and t.archived = false;
+
+  select count(*) into v_total
+  from public.tasks
+  where user_id = v_user and archived = false;
+
+  insert into public.daily_progress(
+    user_id, progress_date, tasks_completed, tasks_total, xp_earned, coins_earned
+  )
+  values(v_user, p_completion_date, 1, v_total, v_xp, v_coins)
+  on conflict(user_id, progress_date) do update set
+    tasks_completed = v_completed,
+    tasks_total = v_total,
+    xp_earned = public.daily_progress.xp_earned + v_xp,
+    coins_earned = public.daily_progress.coins_earned + v_coins,
+    updated_at = timezone('utc', now());
+
+  -- Daily completion bonus is awarded only once when every active task
+  -- has been completed for the date.
+  if v_completed = v_total and v_total > 0 then
+    select * into v_existing
+    from public.task_completions
+    where user_id = v_user
+      and completion_date = p_completion_date
+    order by completed_at desc
+    limit 1;
+
+    select last_completed_date,current_streak into v_last,v_streak
+    from public.streaks
+    where user_id = v_user
+    for update;
+
+    if v_last is distinct from p_completion_date then
+      v_daily_bonus := 25;
+      if v_last = p_completion_date - 1 then
+        v_streak := coalesce(v_streak,0) + 1;
+      else
+        v_streak := 1;
+      end if;
+
+      v_streak_bonus := case v_streak
+        when 3 then 10
+        when 7 then 25
+        when 14 then 50
+        when 30 then 100
+        else 0
+      end;
+
+      update public.streaks
+        set current_streak = v_streak,
+            longest_streak = greatest(longest_streak, v_streak),
+            last_completed_date = p_completion_date
+        where user_id = v_user;
+
+      update public.player_stats
+        set coins = coins + v_daily_bonus + v_streak_bonus
+        where user_id = v_user;
+
+      update public.daily_progress
+        set daily_quest_completed = true,
+            coins_earned = coins_earned + v_daily_bonus + v_streak_bonus,
+            streak = v_streak
+        where user_id = v_user and progress_date = p_completion_date;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'completed', true,
+    'xp_gain', v_xp,
+    'coin_gain', v_coins + v_daily_bonus + v_streak_bonus,
+    'daily_bonus', v_daily_bonus,
+    'streak_bonus', v_streak_bonus
+  );
+end;
+$$;
+
+revoke all on function public.complete_task(uuid,date) from public;
+grant execute on function public.complete_task(uuid,date) to authenticated;
+
+create or replace function public.get_player_state()
+returns jsonb
+language sql
+security invoker
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'xp', coalesce((select xp from public.player_stats where user_id = auth.uid()),0),
+    'coins', coalesce((select coins from public.player_stats where user_id = auth.uid()),0),
+    'streak', coalesce((select current_streak from public.streaks where user_id = auth.uid()),0),
+    'longest_streak', coalesce((select longest_streak from public.streaks where user_id = auth.uid()),0)
+  );
+$$;
+
+grant execute on function public.get_player_state() to authenticated;
