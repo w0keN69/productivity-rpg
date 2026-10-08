@@ -152,3 +152,19 @@ export async function syncLocalContent(session,localData){
   }
   return {synced:true,routines:routineRows.length,tasks:taskRows.length};
 }
+
+
+export async function isCloudReachable(session){
+  if(!session?.user?.id)return false;
+  try{
+    const client=await requireClient();
+    const {error}=await client.from('profiles').select('user_id').eq('user_id',session.user.id).maybeSingle();
+    return !error;
+  }catch{return false;}
+}
+
+export async function reconcileCloudContent(session,localData){
+  // Content uses local_id as the stable identity. Local changes are pushed
+  // only when the caller has a confirmed authenticated connection.
+  return syncLocalContent(session,localData);
+}
