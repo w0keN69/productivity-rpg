@@ -1,6 +1,6 @@
 import {createStore} from '../core/store.js';
 import {defaultData,clone} from '../data/defaults.js';
-import {loadState,saveState,exportBackup,persistStorage} from '../services/storage.js';
+import {loadState,saveState,exportBackup,persistStorage,enqueueSync,clearSyncQueue} from '../services/storage.js';
 import {allTasks,levelFromXp,xpForLevel,xpToNextLevel,XP,toggleTask as gameToggle,refreshDailyState,ACHIEVEMENTS,dailyQuestProgress,weeklyQuestProgress,weekKey} from '../services/game.js';
 import {localDateKey,formatDate} from '../utils/date.js';
 import {getSession,signUp,signIn,signOut,isCloudConfigured,onAuthStateChange} from '../services/auth.js';
@@ -18,7 +18,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 
 function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('show'),2800);}
-function save(){clearTimeout(timer);const status=$('#saveStatus');if(status)status.textContent='Saving…';timer=setTimeout(async()=>{await saveState(store.get().data,store.get().completed);if(authSession){try{await syncLocalContent(authSession,store.get().data);}catch(e){console.error('Cloud content sync failed',e);if($('#saveStatus'))$('#saveStatus').textContent='Local only';}}if($('#saveStatus'))$('#saveStatus').textContent=authSession?'Synced':'Saved';},150);}
+function save(){clearTimeout(timer);const status=$('#saveStatus');if(status)status.textContent='Saving…';timer=setTimeout(async()=>{const snapshot=store.get();await saveState(snapshot.data,snapshot.completed);if(authSession){try{await syncLocalContent(authSession,snapshot.data);await clearSyncQueue();if($('#saveStatus'))$('#saveStatus').textContent='Synced';}catch(e){console.error('Cloud content sync failed',e);await enqueueSync({type:'content',version:snapshot.data.version});if($('#saveStatus'))$('#saveStatus').textContent='Offline';}}else{if($('#saveStatus'))$('#saveStatus').textContent='Saved';}},150);}
 function done(t){return !!store.get().completed[localDateKey()+'_'+t.id];}
 function toggleMenu(force){menuOpen=typeof force==='boolean'?force:!menuOpen;const p=$('#menuPanel'),b=$('#menuBackdrop');if(p)p.classList.toggle('open',menuOpen);if(b)b.classList.toggle('open',menuOpen);$('#menuBtn')?.setAttribute('aria-expanded',String(menuOpen));}
 
