@@ -101,7 +101,7 @@ export async function syncLocalContent(session,localData){
   const wantedRoutineIds=new Set(routineRows.map(r=>r.local_id));
   const staleRoutines=(oldRoutines||[]).filter(r=>r.local_id&&!wantedRoutineIds.has(r.local_id)).map(r=>r.id);
   if(staleRoutines.length){
-    const {error}=await client.from('routines').delete().eq('user_id',userId).in('id',staleRoutines);
+    const {error}=await client.from('routines').update({archived:true}).eq('user_id',userId).in('id',staleRoutines);
     if(error)throw error;
   }
   if(routineRows.length){
@@ -129,7 +129,7 @@ export async function syncLocalContent(session,localData){
   const wantedTaskIds=new Set(taskRows.map(t=>t.local_id));
   const staleTasks=(oldTasks||[]).filter(t=>t.local_id&&!wantedTaskIds.has(t.local_id)).map(t=>t.id);
   if(staleTasks.length){
-    const {error}=await client.from('tasks').delete().eq('user_id',userId).in('id',staleTasks);
+    const {error}=await client.from('tasks').update({archived:true}).eq('user_id',userId).in('id',staleTasks);
     if(error)throw error;
   }
   if(taskRows.length){
