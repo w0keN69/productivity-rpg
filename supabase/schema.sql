@@ -890,3 +890,71 @@ $$;
 
 revoke all on function public.unlock_achievement(text) from public;
 grant execute on function public.unlock_achievement(text) to authenticated;
+
+
+-- ------------------------------------------------------------
+-- Cloud history and quest read model
+-- ------------------------------------------------------------
+
+create or replace function public.get_progress_summary(p_start date default current_date - 6)
+returns jsonb
+language sql
+security invoker
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'daily_progress', coalesce((
+      select jsonb_agg(to_jsonb(x) order by x.progress_date)
+      from (
+        select progress_date,tasks_completed,tasks_total,xp_earned,coins_earned,
+               daily_quest_completed,streak
+        from public.daily_progress
+        where user_id=auth.uid() and progress_date>=p_start
+        order by progress_date
+      ) x
+    ),'[]'::jsonb),
+    'task_completions', coalesce((
+      select jsonb_agg(to_jsonb(x) order by x.completion_date,x.completed_at)
+      from (
+        select tc.task_id,tc.completion_date,tc.completed_at,tc.xp_earned,tc.coins_earned,
+               t.local_id,t.name
+        from public.task_completions tc
+        join public.tasks t on t.id=tc.task_id
+        where tc.user_id=auth.uid() and tc.completion_date>=p_start
+        order by tc.completion_date,tc.completed_at
+      ) x
+    ),'[]'::jsonb),
+    'reward_redemptions', coalesce((
+      select jsonb_agg(to_jsonb(x) order by x.redeemed_at desc)
+      from (
+        select id,reward_id,reward_name,coin_cost,time_limit_minutes,redeemed_at,expires_at
+        from public.reward_redemptions
+        where user_id=auth.uid()
+        order by redeemed_at desc
+        limit 100
+      ) x
+    ),'[]'::jsonb),
+    'focus_sessions', coalesce((
+      select jsonb_agg(to_jsonb(x) order by x.completed_at desc)
+      from (
+        select id,preset_id,focus_minutes,round_number,completed_at,xp_earned,coins_earned
+        from public.focus_sessions
+        where user_id=auth.uid()
+        order by completed_at desc
+        limit 100
+      ) x
+    ),'[]'::jsonb),
+    'achievements', coalesce((
+      select jsonb_agg(to_jsonb(x) order by x.unlocked_at desc)
+      from (
+        select ua.achievement_id,ua.unlocked_at,a.name,a.description,a.xp_reward,a.coin_reward
+        from public.user_achievements ua
+        join public.achievement_definitions a on a.id=ua.achievement_id
+        where ua.user_id=auth.uid()
+        order by ua.unlocked_at desc
+      ) x
+    ),'[]'::jsonb)
+  );
+$$;
+
+grant execute on function public.get_progress_summary(date) to authenticated;
