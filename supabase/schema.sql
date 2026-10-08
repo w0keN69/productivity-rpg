@@ -121,6 +121,11 @@ create index if not exists task_completions_user_date_idx
 create index if not exists task_completions_task_idx
   on public.task_completions(task_id, completion_date desc);
 
+-- Prevent duplicate completion records for the same task/day,
+-- including concurrent requests.
+create unique index if not exists task_completions_user_task_date_uidx
+  on public.task_completions(user_id, task_id, completion_date);
+
 create table if not exists public.daily_progress (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -862,17 +867,69 @@ declare
   v_def public.achievement_definitions%rowtype;
   v_xp integer;
   v_coins integer;
+  v_current_xp bigint;
+  v_current_streak integer;
+  v_days_completed integer;
+  v_current_level integer := 1;
+  v_eligible boolean := false;
 begin
   if v_user is null then raise exception 'Authentication required'; end if;
 
-  select * into v_def from public.achievement_definitions where id=p_achievement_id;
+  select * into v_def
+  from public.achievement_definitions
+  where id=p_achievement_id;
+
   if not found then raise exception 'Achievement not found'; end if;
 
-  if exists(select 1 from public.user_achievements where user_id=v_user and achievement_id=p_achievement_id)
-    then return jsonb_build_object('unlocked',false,'already_unlocked',true); end if;
+  if exists(
+    select 1 from public.user_achievements
+    where user_id=v_user and achievement_id=p_achievement_id
+  ) then
+    return jsonb_build_object('unlocked',false,'already_unlocked',true);
+  end if;
 
-  select xp_reward,coin_reward into v_xp,v_coins from public.achievement_definitions
-  where id=p_achievement_id;
+  select xp into v_current_xp
+  from public.player_stats
+  where user_id=v_user;
+
+  select current_streak into v_current_streak
+  from public.streaks
+  where user_id=v_user;
+
+  select count(*)::integer into v_days_completed
+  from public.daily_progress
+  where user_id=v_user
+    and daily_quest_completed=true;
+
+  -- Match the app's level progression:
+  -- level 1 requires 100 XP, level 2 requires another 150 XP, etc.
+  while v_current_xp >= (
+    100 + ((v_current_level - 1) * 50)
+  ) loop
+    v_current_xp := v_current_xp - (
+      100 + ((v_current_level - 1) * 50)
+    );
+    v_current_level := v_current_level + 1;
+  end loop;
+
+  v_current_xp := coalesce(
+    (select xp from public.player_stats where user_id=v_user), 0
+  );
+
+  v_eligible := case v_def.requirement_type
+    when 'xp' then v_current_xp >= v_def.requirement_value
+    when 'level' then v_current_level >= v_def.requirement_value
+    when 'streak' then coalesce(v_current_streak,0) >= v_def.requirement_value
+    when 'days_completed' then v_days_completed >= v_def.requirement_value
+    else false
+  end;
+
+  if not v_eligible then
+    raise exception 'Achievement requirement not met';
+  end if;
+
+  v_xp := v_def.xp_reward;
+  v_coins := v_def.coin_reward;
 
   insert into public.user_achievements(user_id,achievement_id)
   values(v_user,p_achievement_id);
