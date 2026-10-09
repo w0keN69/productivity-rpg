@@ -383,11 +383,13 @@ alter table public.focus_sessions enable row level security;
 alter table public.notes enable row level security;
 
 -- Profiles
+drop policy if exists "Users can view own profile" on public.profiles;
 create policy "Users can view own profile"
 on public.profiles for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
 on public.profiles for update
 to authenticated
@@ -395,11 +397,13 @@ using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
 -- Settings
+drop policy if exists "Users can view own settings" on public.user_settings;
 create policy "Users can view own settings"
 on public.user_settings for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can update own settings" on public.user_settings;
 create policy "Users can update own settings"
 on public.user_settings for update
 to authenticated
@@ -407,6 +411,7 @@ using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
 -- Player stats
+drop policy if exists "Users can view own player stats" on public.player_stats;
 create policy "Users can view own player stats"
 on public.player_stats for select
 to authenticated
@@ -416,6 +421,7 @@ using ((select auth.uid()) = user_id);
 -- They will be changed through trusted server-side gameplay RPCs.
 
 -- Streaks
+drop policy if exists "Users can view own streak" on public.streaks;
 create policy "Users can view own streak"
 on public.streaks for select
 to authenticated
@@ -425,60 +431,71 @@ using ((select auth.uid()) = user_id);
 -- They will be calculated by trusted server-side gameplay logic.
 
 -- User-owned CRUD tables
+drop policy if exists "Users can manage own routines" on public.routines;
 create policy "Users can manage own routines"
 on public.routines for all
 to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can manage own tasks" on public.tasks;
 create policy "Users can manage own tasks"
 on public.tasks for all
 to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can view own task completions" on public.task_completions;
 create policy "Users can view own task completions"
 on public.task_completions for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can view own daily progress" on public.daily_progress;
 create policy "Users can view own daily progress"
 on public.daily_progress for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can view own quests" on public.quests;
 create policy "Users can view own quests"
 on public.quests for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can view own user achievements" on public.user_achievements;
 create policy "Users can view own user achievements"
 on public.user_achievements for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can manage own rewards" on public.rewards;
 create policy "Users can manage own rewards"
 on public.rewards for all
 to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can view own reward redemptions" on public.reward_redemptions;
 create policy "Users can view own reward redemptions"
 on public.reward_redemptions for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can manage own focus presets" on public.focus_presets;
 create policy "Users can manage own focus presets"
 on public.focus_presets for all
 to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can view own focus sessions" on public.focus_sessions;
 create policy "Users can view own focus sessions"
 on public.focus_sessions for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can manage own notes" on public.notes;
 create policy "Users can manage own notes"
 on public.notes for all
 to authenticated
@@ -486,6 +503,7 @@ using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
 -- Achievement definitions are readable but app-controlled.
+drop policy if exists "Authenticated users can read achievement definitions" on public.achievement_definitions;
 create policy "Authenticated users can read achievement definitions"
 on public.achievement_definitions for select
 to authenticated
@@ -561,16 +579,19 @@ create table if not exists public.user_migrations (
 
 alter table public.user_migrations enable row level security;
 
+drop policy if exists "Users can view own migration" on public.user_migrations;
 create policy "Users can view own migration"
 on public.user_migrations for select
 to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can create own migration" on public.user_migrations;
 create policy "Users can create own migration"
 on public.user_migrations for insert
 to authenticated
 with check ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can update own migration" on public.user_migrations;
 create policy "Users can update own migration"
 on public.user_migrations for update
 to authenticated
