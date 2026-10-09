@@ -42,7 +42,7 @@ export async function migrateLocalContent(session,localData){
   const user=requireUser(session),client=await getClient();
   if(!client)throw new Error('Cloud is not configured.');
   const before=await inspectCloud(session);
-  if(!before.empty && before.migration?.status!=='pending')
+  if(!before.empty && !['pending','content_migrated'].includes(before.migration?.status))
     throw new Error('This cloud account already contains migrated data. Choose a merge strategy before replacing it.');
 
   const routines=Object.entries(localData.routines||{});
