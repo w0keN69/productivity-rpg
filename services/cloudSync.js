@@ -13,7 +13,7 @@ export async function loadCloudState(session){
   if(!session?.user?.id)throw new Error('Authentication required.');
   const client=await requireClient(), userId=session.user.id;
 
-  const [{data:routines,error:rErr},{data:tasks,error:tErr},{data:rewards,error:rwErr},{data:presets,error:pErr},{data:notes,error:nErr},{data:player,error:psErr},{data:streak,error:sErr}]=await Promise.all([
+  const [{data:routineRecords,error:rErr},{data:tasks,error:tErr},{data:rewards,error:rwErr},{data:presets,error:pErr},{data:notes,error:nErr},{data:player,error:psErr},{data:streak,error:sErr}]=await Promise.all([
     client.from('routines').select('*').eq('user_id',userId).eq('archived',false).order('sort_order'),
     client.from('tasks').select('*').eq('user_id',userId).eq('archived',false).order('sort_order'),
     client.from('rewards').select('*').eq('user_id',userId).eq('active',true).order('created_at'),
@@ -29,9 +29,9 @@ export async function loadCloudState(session){
   if(cErr)throw cErr;
 
   const routines={};
-  for(const r of routinesRows(routines))routines[r.name]=[];
+  for(const r of routinesRows(routineRecords))routines[r.name]=[];
   for(const t of (tasks||[])){
-    const routine=(routinesRows(routines).find(r=>r.id===t.routine_id));
+    const routine=(routinesRows(routineRecords).find(r=>r.id===t.routine_id));
     if(routine){
       if(!routines[routine.name])routines[routine.name]=[];
       routines[routine.name].push({
