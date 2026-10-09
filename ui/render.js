@@ -34,7 +34,7 @@ function render(){
 }
 
 function today(s){
-  const d=s.data,l=levelFromXp(d.xp),current=xpForLevel(d.xp),next=xpToNextLevel(d.xp),routines=Object.entries(d.routines),todayQ=dailyQuestProgress(d,s.completed),weekQ=weeklyQuestProgress(d);
+  const d=s.data,l=levelFromXp(d.xp),current=xpForLevel(d.xp),next=xpToNextLevel(d.xp),routineEntries=Object.entries(d.routines),todayQ=dailyQuestProgress(d,s.completed),weekQ=weeklyQuestProgress(d);
   return `<section class="stats-card">
     <div class="player-stats">
       <div class="stat stat-main"><span>Level</span><b>${l}</b><small>${current} / ${current+next} XP</small></div>
