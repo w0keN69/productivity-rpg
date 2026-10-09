@@ -18,7 +18,7 @@ export async function getSession(){
 }
 export async function signUp(email,password,displayName=''){
   const client=await getClient(); if(!client)throw new Error('Cloud authentication is not configured yet.');
-  return client.auth.signUp({email,password,options:{data:{display_name:displayName}}});
+  return client.auth.signUp({email,password,options:{data:{display_name:displayName},emailRedirectTo:'https://w0ken69.github.io/productivity-rpg/'}});
 }
 export async function signIn(email,password){
   const client=await getClient(); if(!client)throw new Error('Cloud authentication is not configured yet.');
