@@ -199,14 +199,20 @@ function startRewardTicker(){
 }
 
 async function init(){
-  await persistStorage();
-  try{authSession=await getSession();}catch{authSession=null;}
-  if(isCloudConfigured()){try{authSession=await getSession();await onAuthStateChange(session=>{authSession=session;render();});}catch(e){console.error(e);}}
+  // Load and display local data first. Cloud/CDN availability must never block the app UI.
   const saved=await loadState();
   if(saved?.data){
     refreshDailyState(saved.data);
     const completed=saved.completed&&typeof saved.completed==='object'?saved.completed:{};
     store.replace(saved.data,completed);
+  }
+  render();
+  await persistStorage();
+  if(isCloudConfigured()){
+    try{
+      authSession=await getSession();
+      await onAuthStateChange(session=>{authSession=session;render();});
+    }catch(e){console.error('Cloud authentication unavailable; continuing locally.',e);}
   }
   if(authSession){
     try{
