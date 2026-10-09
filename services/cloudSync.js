@@ -13,16 +13,20 @@ export async function loadCloudState(session){
   if(!session?.user?.id)throw new Error('Authentication required.');
   const client=await requireClient(), userId=session.user.id;
 
-  const [{data:routineRecords,error:rErr},{data:tasks,error:tErr},{data:rewards,error:rwErr},{data:presets,error:pErr},{data:notes,error:nErr},{data:player,error:psErr},{data:streak,error:sErr}]=await Promise.all([
+  const [{data:routineRecords,error:rErr},{data:tasks,error:tErr},{data:rewards,error:rwErr},{data:presets,error:pErr},{data:notes,error:nErr},{data:player,error:psErr},{data:streak,error:sErr},{data:dailyHistory,error:dhErr},{data:redemptions,error:redErr},{data:focusRows,error:focusErr},{data:achievements,error:achErr}]=await Promise.all([
     client.from('routines').select('*').eq('user_id',userId).eq('archived',false).order('sort_order'),
     client.from('tasks').select('*').eq('user_id',userId).eq('archived',false).order('sort_order'),
     client.from('rewards').select('*').eq('user_id',userId).eq('active',true).order('created_at'),
     client.from('focus_presets').select('*').eq('user_id',userId).order('created_at'),
     client.from('notes').select('*').eq('user_id',userId).eq('archived',false).order('pinned',{ascending:false}).order('updated_at',{ascending:false}),
     client.rpc('get_player_state'),
-    client.from('streaks').select('*').eq('user_id',userId).maybeSingle()
+    client.from('streaks').select('*').eq('user_id',userId).maybeSingle(),
+    client.from('daily_progress').select('*').eq('user_id',userId).order('progress_date'),
+    client.from('reward_redemptions').select('*').eq('user_id',userId).order('redeemed_at'),
+    client.from('focus_sessions').select('*').eq('user_id',userId).order('completed_at'),
+    client.from('user_achievements').select('achievement_id').eq('user_id',userId)
   ]);
-  for(const e of [rErr,tErr,rwErr,pErr,nErr,psErr,sErr])if(e)throw e;
+  for(const e of [rErr,tErr,rwErr,pErr,nErr,psErr,sErr,dhErr,redErr,focusErr,achErr])if(e)throw e;
 
   const {data:completions,error:cErr}=await client.from('task_completions')
     .select('task_id,completion_date').eq('user_id',userId).eq('completion_date',localDateKey());
@@ -44,10 +48,14 @@ export async function loadCloudState(session){
     routines,
     rewards:(rewards||[]).map(r=>({id:r.local_id||r.id,name:r.name,cost:r.coin_cost,timeLimit:r.time_limit_minutes})),
     focusPresets:(presets||[]).map(p=>({id:p.local_id||p.id,name:p.name,work:p.focus_minutes,break:p.break_minutes,rounds:p.rounds})),
-    notes:(notes||[]).map(n=>({id:n.local_id||n.id,title:n.title,body:n.body,pinned:n.pinned,date:(n.created_at||'').slice(0,10)||localDateKey(n.created_at)})),
+    notes:(notes||[]).map(n=>({id:n.local_id||n.id,title:n.title,body:n.body,pinned:n.pinned,date:(n.created_at||'').slice(0,10)||localDateKey()})),
+    history:(dailyHistory||[]).map(h=>({date:h.progress_date,done:h.tasks_completed,total:h.tasks_total,xp:h.xp_earned,coins:h.coins_earned,streak:h.streak,xpEarned:h.xp_earned,coinsEarned:h.coins_earned})),
+    rewardHistory:(redemptions||[]).map(r=>({id:r.id,name:r.reward_name,cost:r.coin_cost,timeLimit:r.time_limit_minutes,date:(r.redeemed_at||'').slice(0,10),redeemedAt:r.redeemed_at})),
+    activeRewards:(redemptions||[]).filter(r=>r.expires_at&&new Date(r.expires_at).getTime()>Date.now()).map(r=>({id:r.id,name:r.reward_name,cost:r.coin_cost,timeLimit:r.time_limit_minutes||0,startedAt:r.redeemed_at,expiresAt:new Date(r.expires_at).getTime()})),
+    focusSessions:(focusRows||[]).map(s=>({id:s.id,minutes:s.focus_minutes,date:(s.completed_at||'').slice(0,10),xp:s.xp_earned,coins:s.coins_earned})),
     xp:Number(player?.xp)||0,coins:Number(player?.coins)||0,
     streak:Number(streak?.current_streak)||0,lastComplete:streak?.last_completed_date||null,
-    achievementRewards:[]
+    achievementRewards:(achievements||[]).map(a=>a.achievement_id)
   };
   const completed={};
   for(const c of (completions||[]))completed[c.completion_date+'_'+c.task_id]=true;
