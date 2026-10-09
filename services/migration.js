@@ -102,7 +102,10 @@ export async function migrateLocalContent(session,localData){
   },{onConflict:'user_id'});
   if(migrationError)throw migrationError;
 
-  return {status:'content_migrated',routines:routineRows.length,tasks:taskRows.length,rewards:(localData.rewards||[]).length,focusPresets:(localData.focusPresets||[]).length,notes:(localData.notes||[]).length};
+  const {data:finalized,error:finalizeError}=await client.rpc('finalize_local_migration');
+  if(finalizeError)throw new Error('Your content and progress snapshot were saved, but the database restore step is not installed yet. Keep your local data and backup. Details: '+finalizeError.message);
+
+  return {status:'completed',finalized,routines:routineRows.length,tasks:taskRows.length,rewards:(localData.rewards||[]).length,focusPresets:(localData.focusPresets||[]).length,notes:(localData.notes||[]).length};
 }
 
 export async function migrateLocalState(session,localData,completed={}){
