@@ -146,7 +146,39 @@ function startFocus(minutes){focusPlan=null;focusRound=1;focusMode='Focus';focus
 function startPreset(p){focusPlan=p;focusRound=1;focusMode='Focus';focusTotal=p.work*60;focusRemaining=focusTotal;runFocusTimer();render();}
 function runFocusTimer(){focusRunning=true;clearInterval(focusTimer);focusTimer=setInterval(()=>{focusRemaining--;updateFocusDisplay();if(focusRemaining<=0)completeFocusPhase();},1000);}
 function updateFocusDisplay(){const e=$('#focusDisplay');if(e){const m=Math.floor(focusRemaining/60),s=String(focusRemaining%60).padStart(2,'0');e.textContent=m+':'+s;}}
-async function completeFocusPhase(){clearInterval(focusTimer);focusRunning=false;if(focusMode==='Focus'){const d=store.get().data;try{let reward={xp_gain:15,coin_gain:5};if(authSession)reward=await completeCloudFocus(focusPlan?.cloudId||null,Math.round(focusTotal/60),focusRound);d.xp+=Number(reward.xp_gain)||0;d.coins+=Number(reward.coin_gain)||0;d.focusSessions.push({id:String(reward.id||'fs_'+Date.now()),minutes:Math.round(focusTotal/60),date:localDateKey(),xp:Number(reward.xp_gain)||15,coins:Number(reward.coin_gain)||5});save();toast('Focus block complete: +'+(Number(reward.xp_gain)||15)+' XP, +'+(Number(reward.coin_gain)||5)+' coins');if(focusPlan&&focusRound<focusPlan.rounds&&focusPlan.break>0){focusMode='Short Break';focusTotal=focusPlan.break*60;focusRemaining=focusTotal;runFocusTimer();render();return;}if(focusPlan&&focusRound<focusPlan.rounds){focusRound++;focusMode='Focus';focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();return;}if(focusPlan){focusPlan=null;focusRemaining=0;render();return;}}else if(focusPlan){focusRound++;focusMode='Focus';focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();return;}focusRemaining=0;render();}
+async function completeFocusPhase(){
+  clearInterval(focusTimer);
+  focusRunning=false;
+  if(focusMode==='Focus'){
+    const d=store.get().data;
+    try{
+      let reward={xp_gain:15,coin_gain:5};
+      if(authSession)reward=await completeCloudFocus(focusPlan?.cloudId||null,Math.round(focusTotal/60),focusRound);
+      d.xp+=Number(reward.xp_gain)||0;
+      d.coins+=Number(reward.coin_gain)||0;
+      d.focusSessions.push({id:String(reward.id||'fs_'+Date.now()),minutes:Math.round(focusTotal/60),date:localDateKey(),xp:Number(reward.xp_gain)||15,coins:Number(reward.coin_gain)||5});
+      save();
+      toast('Focus block complete: +'+(Number(reward.xp_gain)||15)+' XP, +'+(Number(reward.coin_gain)||5)+' coins');
+    }catch(e){
+      console.error('Focus session could not be saved',e);
+      toast(e.message||'Could not save focus session');
+      focusRemaining=0;
+      render();
+      return;
+    }
+    if(focusPlan&&focusRound<focusPlan.rounds&&focusPlan.break>0){
+      focusMode='Short Break';focusTotal=focusPlan.break*60;focusRemaining=focusTotal;runFocusTimer();render();return;
+    }
+    if(focusPlan&&focusRound<focusPlan.rounds){
+      focusRound++;focusMode='Focus';focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();return;
+    }
+    if(focusPlan){focusPlan=null;focusRemaining=0;render();return;}
+  }else if(focusPlan){
+    focusRound++;focusMode='Focus';focusTotal=focusPlan.work*60;focusRemaining=focusTotal;runFocusTimer();render();return;
+  }
+  focusRemaining=0;
+  render();
+}
 function bind(){
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;menuOpen=false;settingsOpen=false;render();});
   $('#menuBtn')?.addEventListener('click',e=>{e.stopPropagation();settingsOpen=false;toggleMenu();});
