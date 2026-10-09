@@ -1,4 +1,4 @@
-const CACHE='in-track-v10';
+const CACHE='in-track-v11';
 const ASSETS=['./','./index.html','./config.js','./ui/styles.css','./ui/render.js','./core/store.js','./data/defaults.js','./services/storage.js','./services/game.js','./services/auth.js','./services/migration.js','./services/cloudSync.js','./services/cloudGame.js','./services/cloudHistory.js','./services/cloudRewards.js','./utils/date.js','./manifest.webmanifest','./public/icons/icon.svg'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
