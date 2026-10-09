@@ -44,7 +44,7 @@ function today(s){
   </section>
   <section class="card">
     <div class="card-head"><div><h2>Today's Routines</h2></div><button class="btn" id="settingsBtn">Settings</button></div>
-    <div class="routine-list">${routines.map(([name,tasks])=>routineSection(name,tasks)).join('')||'<div class="empty">No routines yet.</div>'}</div>
+    <div class="routine-list">${routineEntries.map(([name,tasks])=>routineSection(name,tasks)).join('')||'<div class="empty">No routines yet.</div>'}</div>
     <div class="legend"><span><i class="dot high"></i>High</span><span><i class="dot medium"></i>Medium</span><span><i class="dot low"></i>Low</span></div>
   </section>
   <section class="card quest-card">
