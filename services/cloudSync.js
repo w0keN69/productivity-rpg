@@ -13,16 +13,17 @@ export async function loadCloudState(session){
   if(!session?.user?.id)throw new Error('Authentication required.');
   const client=await requireClient(), userId=session.user.id;
 
-  const [{data:routineRecords,error:rErr},{data:tasks,error:tErr},{data:rewards,error:rwErr},{data:presets,error:pErr},{data:notes,error:nErr},{data:player,error:psErr},{data:streak,error:sErr}]=await Promise.all([
+  const [{data:routineRecords,error:rErr},{data:tasks,error:tErr},{data:rewards,error:rwErr},{data:presets,error:pErr},{data:notes,error:nErr},{data:player,error:psErr},{data:streak,error:sErr},{data:dailyHistory,error:historyErr}]=await Promise.all([
     client.from('routines').select('*').eq('user_id',userId).eq('archived',false).order('sort_order'),
     client.from('tasks').select('*').eq('user_id',userId).eq('archived',false).order('sort_order'),
     client.from('rewards').select('*').eq('user_id',userId).eq('active',true).order('created_at'),
     client.from('focus_presets').select('*').eq('user_id',userId).order('created_at'),
     client.from('notes').select('*').eq('user_id',userId).eq('archived',false).order('pinned',{ascending:false}).order('updated_at',{ascending:false}),
     client.rpc('get_player_state'),
-    client.from('streaks').select('*').eq('user_id',userId).maybeSingle()
+    client.from('streaks').select('*').eq('user_id',userId).maybeSingle(),
+    client.from('daily_progress').select('*').eq('user_id',userId).order('progress_date',{ascending:false}).limit(90)
   ]);
-  for(const e of [rErr,tErr,rwErr,pErr,nErr,psErr,sErr])if(e)throw e;
+  for(const e of [rErr,tErr,rwErr,pErr,nErr,psErr,sErr,historyErr])if(e)throw e;
 
   const {data:completions,error:cErr}=await client.from('task_completions')
     .select('task_id,completion_date').eq('user_id',userId).eq('completion_date',localDateKey());
@@ -45,6 +46,7 @@ export async function loadCloudState(session){
     rewards:(rewards||[]).map(r=>({id:r.local_id||r.id,name:r.name,cost:r.coin_cost,timeLimit:r.time_limit_minutes})),
     focusPresets:(presets||[]).map(p=>({id:p.local_id||p.id,name:p.name,work:p.focus_minutes,break:p.break_minutes,rounds:p.rounds})),
     notes:(notes||[]).map(n=>({id:n.local_id||n.id,title:n.title,body:n.body,pinned:n.pinned,date:(n.created_at||'').slice(0,10)||localDateKey()})),
+    history:(dailyHistory||[]).map(h=>({date:h.progress_date,done:Number(h.tasks_completed)||0,total:Number(h.tasks_total)||0,streak:Number(h.streak)||0,xpEarned:Number(h.xp_earned)||0,coinsEarned:Number(h.coins_earned)||0})).reverse(),
     xp:Number(player?.xp)||0,coins:Number(player?.coins)||0,
     streak:Number(streak?.current_streak)||0,lastComplete:streak?.last_completed_date||null,
     achievementRewards:[]
