@@ -1036,3 +1036,91 @@ as $$
 $$;
 
 grant execute on function public.get_progress_summary(date) to authenticated;
+
+
+-- Finalize the local-device migration. Safe to rerun: completed migrations are not reapplied.
+create or replace function public.finalize_local_migration()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_snapshot jsonb;
+  v_day jsonb;
+  v_item record;
+  v_days integer := 0;
+  v_tasks integer := 0;
+begin
+  if v_user is null then raise exception 'Authentication required'; end if;
+
+  select protected_snapshot into v_snapshot
+  from public.user_migrations
+  where user_id = v_user and status = 'content_migrated'
+  for update;
+
+  if not found then
+    if exists(select 1 from public.user_migrations where user_id=v_user and status='completed') then
+      return jsonb_build_object('status','completed','already_completed',true);
+    end if;
+    raise exception 'No resumable migration snapshot found. Local data and backup are unchanged.';
+  end if;
+
+  insert into public.player_stats(user_id,xp,coins)
+  values(v_user,greatest(0,coalesce((v_snapshot->>'xp')::bigint,0)),
+              greatest(0,coalesce((v_snapshot->>'coins')::bigint,0)))
+  on conflict(user_id) do update set xp=excluded.xp,coins=excluded.coins,updated_at=now();
+
+  insert into public.streaks(user_id,current_streak,longest_streak,last_completed_date)
+  values(v_user,greatest(0,coalesce((v_snapshot->>'streak')::integer,0)),
+              greatest(0,coalesce((v_snapshot->>'streak')::integer,0)),
+              nullif(v_snapshot->>'lastComplete','')::date)
+  on conflict(user_id) do update set
+    current_streak=excluded.current_streak,
+    longest_streak=greatest(public.streaks.longest_streak,excluded.longest_streak),
+    last_completed_date=excluded.last_completed_date,updated_at=now();
+
+  for v_day in select value from jsonb_array_elements(coalesce(v_snapshot->'history','[]'::jsonb))
+  loop
+    if coalesce(v_day->>'date','') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
+      insert into public.daily_progress(user_id,progress_date,tasks_completed,tasks_total,xp_earned,coins_earned,streak)
+      values(v_user,(v_day->>'date')::date,
+        greatest(0,coalesce((v_day->>'done')::integer,0)),
+        greatest(0,coalesce((v_day->>'total')::integer,0)),
+        greatest(0,coalesce((v_day->>'xpEarned')::integer,0)),
+        greatest(0,coalesce((v_day->>'coinsEarned')::integer,0)),
+        greatest(0,coalesce((v_day->>'streak')::integer,0)))
+      on conflict(user_id,progress_date) do update set
+        tasks_completed=excluded.tasks_completed,tasks_total=excluded.tasks_total,
+        xp_earned=excluded.xp_earned,coins_earned=excluded.coins_earned,
+        streak=excluded.streak,updated_at=now();
+      v_days := v_days + 1;
+    end if;
+  end loop;
+
+  for v_item in
+    select key as k from jsonb_each(coalesce(v_snapshot->'completed','{}'::jsonb))
+    where value = 'true'::jsonb
+  loop
+    if v_item.k ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}_.+$' then
+      insert into public.task_completions(user_id,task_id,completion_date,xp_earned,coins_earned)
+      select v_user,t.id,substring(v_item.k,1,10)::date,t.xp_reward,t.coin_reward
+      from public.tasks t
+      where t.user_id=v_user and t.local_id=substring(v_item.k,12) and t.archived=false
+      on conflict(user_id,task_id,completion_date) do nothing;
+      if found then v_tasks := v_tasks + 1; end if;
+    end if;
+  end loop;
+
+  update public.user_migrations
+  set status='completed',protected_snapshot=null,updated_at=now()
+  where user_id=v_user;
+
+  return jsonb_build_object('status','completed','restored_days',v_days,'restored_task_completions',v_tasks);
+end;
+$$;
+
+revoke all on function public.finalize_local_migration() from public;
+revoke all on function public.finalize_local_migration() from anon;
+grant execute on function public.finalize_local_migration() to authenticated;
