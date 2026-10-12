@@ -6,7 +6,7 @@ import {localDateKey,formatDate} from '../utils/date.js';
 import {getSession,signUp,signIn,signOut,isCloudConfigured,onAuthStateChange} from '../services/auth.js';
 import {inspectCloud,migrateLocalState} from '../services/migration.js';
 import {loadCloudState,saveCloudProfile,saveCloudNote,deleteCloudNote,syncLocalContent} from '../services/cloudSync.js';
-import {completeCloudTask} from '../services/cloudGame.js';
+import {completeCloudTask} from '../services/cloudGame.js?v=22';
 import {redeemCloudReward,completeCloudFocus} from '../services/cloudRewards.js';
 
 const store=createStore();
