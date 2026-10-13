@@ -15,7 +15,7 @@ function routineLocalId(name,index){return 'routine_'+index+'_'+String(name).tri
 function now(){return new Date().toISOString();}
 
 async function countRows(client,table){
-  const {count,error}=await client.from(table).select('id',{count:'exact',head:true});
+  const {count,error}=await client.from(table).select('*',{count:'exact',head:true});
   if(error)throw error;
   return Number(count||0);
 }
